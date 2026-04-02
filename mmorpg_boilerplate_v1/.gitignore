@@ -140,3 +140,5 @@ Thumbs.db
 # =========================
 
 build/**/*.dll
+third_party/asio/*
+!third_party/asio/include/
