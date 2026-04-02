@@ -5,6 +5,9 @@
 #include <mutex>
 #include <sstream>
 #include <iostream>
+#include <string>
+#include <algorithm>
+#include <cmath>
 
 using asio::ip::tcp;
 
@@ -13,6 +16,8 @@ struct PlayerState
     int id{};
     float x{};
     float y{};
+    int hp{20};
+    std::string name;
 };
 
 std::mutex g_mutex;
@@ -28,7 +33,8 @@ std::string BuildSnapshot()
     out << "SNAPSHOT ";
     for (const auto& [id, p] : g_players)
     {
-        out << p.id << "," << p.x << "," << p.y << ";";
+        out << p.id << "," << p.x << "," << p.y
+            << "," << p.hp << "," << p.name << ";";
     }
     out << "\n";
     return out.str();
@@ -56,7 +62,10 @@ void HandleClient(std::shared_ptr<tcp::socket> socket)
     {
         std::lock_guard<std::mutex> lock(g_mutex);
         myId = g_nextId++;
-        g_players[myId] = PlayerState{myId, 200.0f, 200.0f};
+        g_players[myId] = PlayerState{
+            myId, 200.0f, 200.0f, 20,
+            "P" + std::to_string(myId)
+        };
         g_clients.push_back(socket);
     }
 
@@ -98,6 +107,58 @@ void HandleClient(std::shared_ptr<tcp::socket> socket)
                     }
                 }
 
+                BroadcastSnapshot();
+            }
+            else if (line == "ATTACK")
+            {
+                std::lock_guard<std::mutex> lock(g_mutex);
+
+                auto attackerIt = g_players.find(myId);
+                if (attackerIt != g_players.end())
+                {
+                    PlayerState &attacker = attackerIt->second;
+
+                    for (auto &[otherId, target] : g_players)
+                    {
+                        if (otherId == myId)
+                            continue;
+
+                        float dx = target.x - attacker.x;
+                        float dy = target.y - attacker.y;
+                        float distance = std::sqrt(dx * dx + dy * dy);
+
+                        if (distance <= 50.0f)
+                        {
+                            target.hp = std::max(0, target.hp - 1);
+                            break;
+                        }
+                    }
+                }
+
+                BroadcastSnapshot();
+            }
+            else if (line.rfind("CHAT ", 0) == 0)
+            {
+                std::string chatText = line.substr(5);
+
+                std::string sender;
+                {
+                    std::lock_guard<std::mutex> lock(g_mutex);
+                    sender = g_players[myId].name;
+                }
+
+                std::string msg = "CHAT " + sender + ": " + chatText + "\n";
+
+                std::lock_guard<std::mutex> lock(g_mutex);
+                for (auto &client : g_clients)
+                {
+                    if (client && client->is_open())
+                    {
+                        std::error_code ec;
+                        asio::write(*client, asio::buffer(msg), ec);
+                    }
+                }
+            
                 BroadcastSnapshot();
             }
         }

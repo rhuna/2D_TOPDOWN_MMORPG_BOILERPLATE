@@ -23,6 +23,16 @@ void Game::Run()
 
         world_->Update(dt);
 
+        if (IsKeyPressed(KEY_F))
+        {
+            networkClient_.SendAttack();
+        }
+
+        if (IsKeyPressed(KEY_ENTER))
+        {
+            networkClient_.SendChat("Hello world!");
+        }
+
         Vector2 playerPos = world_->GetPlayerPosition();
         networkClient_.SendMove(playerPos.x, playerPos.y);
 
@@ -41,6 +51,13 @@ void Game::Run()
         BeginDrawing();
         ClearBackground(BLACK);
         world_->Draw();
+        auto chat = networkClient_.GetChatMessages();
+        int y = 20;
+        for (const auto &msg : chat)
+        {
+            DrawText(msg.c_str(), 20, y, 18, WHITE);
+            y += 22;
+        }
         EndDrawing();
     }
 

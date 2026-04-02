@@ -65,6 +65,25 @@ void NetworkClient::SendMove(float x, float y)
     asio::write(socket_, asio::buffer(out.str()), ec);
 }
 
+void NetworkClient::SendAttack()
+{
+    if (!connected_)
+        return;
+
+    std::string msg = "ATTACK\n";
+    std::error_code ec;
+    asio::write(socket_, asio::buffer(msg), ec);
+}
+
+void NetworkClient::SendChat(const std::string &text)
+{
+    if (!connected_ || text.empty())
+        return;
+
+    std::string msg = "CHAT " + text + "\n";
+    std::error_code ec;
+    asio::write(socket_, asio::buffer(msg), ec);
+}
 int NetworkClient::GetLocalId() const
 {
     return localId_;
@@ -74,6 +93,12 @@ std::unordered_map<int, RemotePlayer> NetworkClient::GetRemotePlayers() const
 {
     std::lock_guard<std::mutex> lock(playersMutex_);
     return remotePlayers_;
+}
+
+std::vector<std::string> NetworkClient::GetChatMessages() const
+{
+    std::lock_guard<std::mutex> lock(chatMutex_);
+    return chatMessages_;
 }
 
 void NetworkClient::ReadLoop()
@@ -110,6 +135,17 @@ void NetworkClient::HandleLine(const std::string &line)
         return;
     }
 
+    if (line.rfind("CHAT ", 0) == 0)
+    {
+        std::lock_guard<std::mutex> lock(chatMutex_);
+        chatMessages_.push_back(line.substr(5));
+
+        if (chatMessages_.size() > 8)
+            chatMessages_.erase(chatMessages_.begin());
+
+        return;
+    }
+
     if (line.rfind("SNAPSHOT ", 0) == 0)
     {
         std::unordered_map<int, RemotePlayer> nextPlayers;
@@ -132,12 +168,14 @@ void NetworkClient::HandleLine(const std::string &line)
                 parts.push_back(part);
             }
 
-            if (parts.size() == 3)
+            if (parts.size() >= 5)
             {
                 RemotePlayer p;
                 p.id = std::stoi(parts[0]);
                 p.x = std::stof(parts[1]);
                 p.y = std::stof(parts[2]);
+                p.hp = std::stoi(parts[3]);
+                p.name = parts[4];
                 nextPlayers[p.id] = p;
             }
         }
@@ -146,3 +184,8 @@ void NetworkClient::HandleLine(const std::string &line)
         remotePlayers_ = std::move(nextPlayers);
     }
 }
+
+
+
+
+

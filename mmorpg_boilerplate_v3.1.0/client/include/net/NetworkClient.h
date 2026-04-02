@@ -22,12 +22,17 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <string>
+#include <vector>
+#include <atomic>
 
 struct RemotePlayer
 {
     int id{};
     float x{};
     float y{};
+    int hp{20};
+    std::string name;
 };
 
 class NetworkClient
@@ -45,6 +50,10 @@ public:
     int GetLocalId() const;
     std::unordered_map<int, RemotePlayer> GetRemotePlayers() const;
 
+    void SendAttack();
+    void SendChat(const std::string &text);
+    std::vector<std::string> GetChatMessages() const;
+
 private:
     void ReadLoop();
     void HandleLine(const std::string &line);
@@ -59,4 +68,7 @@ private:
 
     mutable std::mutex playersMutex_;
     std::unordered_map<int, RemotePlayer> remotePlayers_;
+
+    mutable std::mutex chatMutex_;
+    std::vector<std::string> chatMessages_;
 };

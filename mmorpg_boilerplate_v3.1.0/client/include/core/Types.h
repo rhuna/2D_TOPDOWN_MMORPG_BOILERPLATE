@@ -82,9 +82,13 @@ struct Drop {
     bool taken = false;
 };
 
+struct RemoteActor : Actor
+{
+    int id{};
+    Vector2 targetPosition{};
+    int hp{20};
+    std::string name;
+};
 
 // Client-side visual representation of a remote player.
-struct RemoteActor : Actor {
-    int id = 0;
-    Vector2 targetPosition{};
-};
+

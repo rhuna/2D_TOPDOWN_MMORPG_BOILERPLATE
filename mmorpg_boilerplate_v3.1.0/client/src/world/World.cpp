@@ -110,11 +110,15 @@ void World::UpdateRemotePlayers(const std::unordered_map<int, RemotePlayer> &sna
             remote.size = player_.size;
             remote.facing = Direction::Down;
             remote.color = Color{170, 210, 255, 255};
+            remote.hp = snapshot.hp;
+            remote.name = snapshot.name;
             remotePlayers_.push_back(remote);
             continue;
         }
 
         it->targetPosition = {snapshot.x, snapshot.y};
+        it->hp = snapshot.hp;
+        it->name = snapshot.name;
 
         Vector2 toTarget{
             it->targetPosition.x - it->position.x,
@@ -722,9 +726,24 @@ void World::DrawEnemy(const Enemy& enemy) const {
 
 
 // Draw a remote networked player using the same player atlas as the local player.
-void World::DrawRemotePlayer(const RemoteActor& remote) const {
+void World::DrawRemotePlayer(const RemoteActor &remote) const
+{
     DrawAnimatedActor(remote, playerAtlas_, Color{170, 210, 255, 255});
-    DrawText(TextFormat("P%d", remote.id), static_cast<int>(remote.position.x - 2.0f), static_cast<int>(remote.position.y - 10.0f), 10, WHITE);
+
+    DrawText(remote.name.c_str(),
+             static_cast<int>(remote.position.x - 6.0f),
+             static_cast<int>(remote.position.y - 12.0f),
+             10,
+             WHITE);
+
+    DrawRectangle(static_cast<int>(remote.position.x),
+                  static_cast<int>(remote.position.y) - 18,
+                  30, 4, DARKGRAY);
+
+    DrawRectangle(static_cast<int>(remote.position.x),
+                  static_cast<int>(remote.position.y) - 18,
+                  static_cast<int>(30 * remote.hp / 20.0f),
+                  4, RED);
 }
 
 // Draw any actor using the correct idle/walk directional animation clip.
