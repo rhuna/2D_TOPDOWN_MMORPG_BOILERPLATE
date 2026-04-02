@@ -8,6 +8,8 @@
 #include <string>
 #include <algorithm>
 #include <cmath>
+#include <chrono>
+#include <memory>
 
 using asio::ip::tcp;
 
@@ -24,20 +26,37 @@ std::mutex g_mutex;
 std::unordered_map<int, PlayerState> g_players;
 std::vector<std::shared_ptr<tcp::socket>> g_clients;
 int g_nextId = 1;
+bool g_running = true;
 
 std::string BuildSnapshot()
 {
-    std::lock_guard<std::mutex> lock(g_mutex);
-
     std::ostringstream out;
     out << "SNAPSHOT ";
-    for (const auto& [id, p] : g_players)
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    for (const auto &[id, p] : g_players)
     {
-        out << p.id << "," << p.x << "," << p.y
-            << "," << p.hp << "," << p.name << ";";
+        out << p.id << "," << p.x << "," << p.y << "," << p.hp << "," << p.name << ";";
     }
     out << "\n";
     return out.str();
+}
+
+void RemoveClient(const std::shared_ptr<tcp::socket> &socket, int myId)
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+
+    g_players.erase(myId);
+
+    g_clients.erase(
+        std::remove_if(
+            g_clients.begin(),
+            g_clients.end(),
+            [&](const std::shared_ptr<tcp::socket> &s)
+            {
+                return !s || s.get() == socket.get();
+            }),
+        g_clients.end());
 }
 
 void BroadcastSnapshot()
@@ -45,12 +64,59 @@ void BroadcastSnapshot()
     const std::string msg = BuildSnapshot();
 
     std::lock_guard<std::mutex> lock(g_mutex);
-    for (auto& client : g_clients)
+
+    for (auto it = g_clients.begin(); it != g_clients.end();)
     {
-        if (client && client->is_open())
+        auto &client = *it;
+        if (!client || !client->is_open())
         {
-            std::error_code ec;
-            asio::write(*client, asio::buffer(msg), ec);
+            it = g_clients.erase(it);
+            continue;
+        }
+
+        std::error_code ec;
+        asio::write(*client, asio::buffer(msg), ec);
+
+        if (ec)
+        {
+            std::cout << "Broadcast write failed: " << ec.message() << "\n";
+            client->close(ec);
+            it = g_clients.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+}
+
+void BroadcastChat(const std::string &sender, const std::string &chatText)
+{
+    const std::string msg = "CHAT " + sender + ": " + chatText + "\n";
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+
+    for (auto it = g_clients.begin(); it != g_clients.end();)
+    {
+        auto &client = *it;
+        if (!client || !client->is_open())
+        {
+            it = g_clients.erase(it);
+            continue;
+        }
+
+        std::error_code ec;
+        asio::write(*client, asio::buffer(msg), ec);
+
+        if (ec)
+        {
+            std::cout << "Chat write failed: " << ec.message() << "\n";
+            client->close(ec);
+            it = g_clients.erase(it);
+        }
+        else
+        {
+            ++it;
         }
     }
 }
@@ -63,24 +129,20 @@ void HandleClient(std::shared_ptr<tcp::socket> socket)
         std::lock_guard<std::mutex> lock(g_mutex);
         myId = g_nextId++;
         g_players[myId] = PlayerState{
-            myId, 200.0f, 200.0f, 20,
-            "P" + std::to_string(myId)
-        };
+            myId, 200.0f, 200.0f, 20, "P" + std::to_string(myId)};
         g_clients.push_back(socket);
     }
 
+    try
     {
         std::string welcome = "ID " + std::to_string(myId) + "\n";
         asio::write(*socket, asio::buffer(welcome));
-    }
 
-    BroadcastSnapshot();
+        std::cout << "Client connected: P" << myId << "\n";
 
-    try
-    {
         asio::streambuf buffer;
 
-        while (true)
+        while (g_running)
         {
             std::size_t bytes = asio::read_until(*socket, buffer, '\n');
             (void)bytes;
@@ -89,7 +151,6 @@ void HandleClient(std::shared_ptr<tcp::socket> socket)
             std::string line;
             std::getline(input, line);
 
-            // Expected: MOVE x y
             if (line.rfind("MOVE ", 0) == 0)
             {
                 std::istringstream iss(line.substr(5));
@@ -97,17 +158,13 @@ void HandleClient(std::shared_ptr<tcp::socket> socket)
                 float y = 0.0f;
                 iss >> x >> y;
 
+                std::lock_guard<std::mutex> lock(g_mutex);
+                auto it = g_players.find(myId);
+                if (it != g_players.end())
                 {
-                    std::lock_guard<std::mutex> lock(g_mutex);
-                    auto it = g_players.find(myId);
-                    if (it != g_players.end())
-                    {
-                        it->second.x = x;
-                        it->second.y = y;
-                    }
+                    it->second.x = x;
+                    it->second.y = y;
                 }
-
-                BroadcastSnapshot();
             }
             else if (line == "ATTACK")
             {
@@ -134,52 +191,33 @@ void HandleClient(std::shared_ptr<tcp::socket> socket)
                         }
                     }
                 }
-
-                BroadcastSnapshot();
             }
             else if (line.rfind("CHAT ", 0) == 0)
             {
                 std::string chatText = line.substr(5);
+                std::string sender = "P" + std::to_string(myId);
 
-                std::string sender;
                 {
                     std::lock_guard<std::mutex> lock(g_mutex);
-                    sender = g_players[myId].name;
-                }
-
-                std::string msg = "CHAT " + sender + ": " + chatText + "\n";
-
-                std::lock_guard<std::mutex> lock(g_mutex);
-                for (auto &client : g_clients)
-                {
-                    if (client && client->is_open())
+                    auto it = g_players.find(myId);
+                    if (it != g_players.end())
                     {
-                        std::error_code ec;
-                        asio::write(*client, asio::buffer(msg), ec);
+                        sender = it->second.name;
                     }
                 }
-            
-                BroadcastSnapshot();
+
+                BroadcastChat(sender, chatText);
             }
         }
     }
-    catch (const std::exception&)
+    catch (const std::exception &e)
     {
-        std::lock_guard<std::mutex> lock(g_mutex);
-        g_players.erase(myId);
-
-        g_clients.erase(
-            std::remove_if(
-                g_clients.begin(),
-                g_clients.end(),
-                [&](const std::shared_ptr<tcp::socket>& s)
-                {
-                    return s.get() == socket.get();
-                }),
-            g_clients.end());
+        std::cout << "Client disconnected: P" << myId << " (" << e.what() << ")\n";
     }
 
-    BroadcastSnapshot();
+    std::error_code ec;
+    socket->close(ec);
+    RemoveClient(socket, myId);
 }
 
 int main()
@@ -191,16 +229,24 @@ int main()
 
         std::cout << "Server running on port 7777...\n";
 
+        std::thread tickThread([]()
+                               {
+            while (g_running)
+            {
+                BroadcastSnapshot();
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            } });
+
         while (true)
         {
             auto socket = std::make_shared<tcp::socket>(io);
             acceptor.accept(*socket);
-
-            std::cout << "Client connected\n";
             std::thread(HandleClient, socket).detach();
         }
+
+        tickThread.join();
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
         std::cerr << "Server error: " << e.what() << "\n";
         return 1;
