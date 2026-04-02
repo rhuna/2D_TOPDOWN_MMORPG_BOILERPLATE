@@ -1,0 +1,156 @@
+
+#define ASIO_STANDALONE
+#include <asio.hpp>
+
+#include <algorithm>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <unordered_map>
+#include <vector>
+
+#include "Protocol.h"
+
+using asio::ip::tcp;
+
+// Prototype player state stored by the server.
+struct PlayerState {
+    int id = 0;
+    float x = 100.0f;
+    float y = 100.0f;
+};
+
+class Session;
+
+// Global state used by this tiny demo server.
+// In a larger server, you would wrap this in a proper Server class.
+std::unordered_map<int, PlayerState> g_players;
+std::vector<std::shared_ptr<Session>> g_sessions;
+
+class Session : public std::enable_shared_from_this<Session> {
+public:
+    explicit Session(tcp::socket socket)
+        : socket_(std::move(socket)) {
+    }
+
+    void Start() {
+        Read();
+    }
+
+    void Send(const Packet& packet) {
+        // Keep packet memory alive until the async write completes.
+        auto packetCopy = std::make_shared<Packet>(packet);
+        asio::async_write(
+            socket_,
+            asio::buffer(packetCopy.get(), sizeof(Packet)),
+            [packetCopy](std::error_code /*ec*/, std::size_t /*bytes*/) {
+                // This is intentionally minimal prototype code.
+            });
+    }
+
+    // Broadcast the complete current player snapshot to every client.
+    static void BroadcastAllStates() {
+        for (const auto& [playerId, player] : g_players) {
+            Packet packet{};
+            packet.type = PacketType::State;
+            packet.id = playerId;
+            packet.x = player.x;
+            packet.y = player.y;
+
+            for (auto& session : g_sessions) {
+                session->Send(packet);
+            }
+        }
+    }
+
+    int id = 0;
+
+private:
+    void Read() {
+        auto self = shared_from_this();
+
+        asio::async_read(
+            socket_,
+            asio::buffer(&buffer_, sizeof(Packet)),
+            [this, self](std::error_code ec, std::size_t /*bytes*/) {
+                if (!ec) {
+                    if (buffer_.type == PacketType::Move) {
+                        g_players[id].x = buffer_.x;
+                        g_players[id].y = buffer_.y;
+                        BroadcastAllStates();
+                    }
+
+                    Read();
+                } else {
+                    std::cout << "Client disconnected: " << id << "\n";
+                    g_players.erase(id);
+
+                    g_sessions.erase(
+                        std::remove_if(
+                            g_sessions.begin(),
+                            g_sessions.end(),
+                            [this](const std::shared_ptr<Session>& session) {
+                                return session.get() == this;
+                            }),
+                        g_sessions.end());
+
+                    BroadcastAllStates();
+                }
+            });
+    }
+
+    tcp::socket socket_;
+    Packet buffer_{};
+};
+
+int main() {
+    try {
+        asio::io_context io;
+        tcp::acceptor acceptor(io, tcp::endpoint(tcp::v4(), 54000));
+
+        int nextId = 1;
+
+        std::cout << "Prototype server listening on port 54000\n";
+
+        std::function<void()> acceptLoop;
+        acceptLoop = [&]() {
+            acceptor.async_accept([&](std::error_code ec, tcp::socket socket) {
+                if (!ec) {
+                    auto session = std::make_shared<Session>(std::move(socket));
+                    session->id = nextId++;
+
+                    g_players[session->id] = PlayerState{
+                        session->id,
+                        100.0f + 20.0f * static_cast<float>(session->id),
+                        100.0f
+                    };
+
+                    g_sessions.push_back(session);
+
+                    // Send the newly connected client its permanent server id.
+                    Packet joinPacket{};
+                    joinPacket.type = PacketType::Join;
+                    joinPacket.id = session->id;
+                    session->Send(joinPacket);
+
+                    session->Start();
+
+                    // Let everyone know about the current full player list.
+                    Session::BroadcastAllStates();
+
+                    std::cout << "Client connected with id " << session->id << "\n";
+                }
+
+                acceptLoop();
+            });
+        };
+
+        acceptLoop();
+        io.run();
+    } catch (const std::exception& ex) {
+        std::cerr << "Server error: " << ex.what() << "\n";
+        return 1;
+    }
+
+    return 0;
+}
