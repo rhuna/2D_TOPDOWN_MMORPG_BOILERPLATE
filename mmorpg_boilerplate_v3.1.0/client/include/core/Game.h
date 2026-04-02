@@ -5,10 +5,12 @@
 #include "raylib.h"
 #include <memory>
 
+class World;
+
 class Game {
 public:
     void Run();
 private:
     std::unique_ptr<World> world_;
-    NetworkClient network_;
+    NetworkClient networkClient_;
 };

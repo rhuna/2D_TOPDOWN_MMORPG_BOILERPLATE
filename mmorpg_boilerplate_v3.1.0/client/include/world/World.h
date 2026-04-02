@@ -1,5 +1,5 @@
 #pragma once
-
+#include "net/NetworkClient.h"
 #include "core/Types.h"
 #include "raylib.h"
 #include <vector>
@@ -42,7 +42,7 @@ public:
     ~World();
     void Update(float dt);
     void Draw() const;
-    void UpdateRemotePlayers(const std::unordered_map<int, RemoteSnapshot>& snapshots, int localId, float dt);
+    void UpdateRemotePlayers(const std::unordered_map<int, RemotePlayer> &snapshots, int localId, float dt);
     Vector2 GetPlayerPosition() const;
     Vector2 GetWorldPixelSize() const;
 

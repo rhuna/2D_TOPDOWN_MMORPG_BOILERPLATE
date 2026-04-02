@@ -1,76 +1,148 @@
 #include "net/NetworkClient.h"
+#include <asio.hpp>
+#include <sstream>
 #include <iostream>
+
 using asio::ip::tcp;
 
-NetworkClient::NetworkClient() : socket_(io_) {}
-NetworkClient::~NetworkClient() { Disconnect(); }
+NetworkClient::NetworkClient()
+    : socket_(ioContext_)
+{
+}
 
-bool NetworkClient::Connect(const char* host, const char* port) {
-    try {
-        tcp::resolver resolver(io_);
-        auto endpoints = resolver.resolve(host, port);
+NetworkClient::~NetworkClient()
+{
+    Disconnect();
+}
+
+bool NetworkClient::Connect(const std::string &host, unsigned short port)
+{
+    try
+    {
+        tcp::resolver resolver(ioContext_);
+        auto endpoints = resolver.resolve(host, std::to_string(port));
         asio::connect(socket_, endpoints);
+
         connected_ = true;
-        BeginRead();
-        ioThread_ = std::thread([this]() { io_.run(); });
-        std::cout << "Connected to " << host << ":" << port << "\n";
+        readThread_ = std::thread(&NetworkClient::ReadLoop, this);
         return true;
-    } catch (const std::exception& ex) {
-        std::cerr << "Network connect failed: " << ex.what() << "\n";
-        connected_ = false;
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Connect failed: " << e.what() << "\n";
         return false;
     }
 }
 
-void NetworkClient::Disconnect() {
-    if (!connected_) return;
+void NetworkClient::Disconnect()
+{
     connected_ = false;
-    try { socket_.close(); } catch (...) {}
-    io_.stop();
-    if (ioThread_.joinable()) ioThread_.join();
-}
 
-void NetworkClient::SendPosition(float x, float y) {
-    if (!connected_) return;
-    Packet packet{};
-    packet.type = PacketType::Move;
-    packet.x = x;
-    packet.y = y;
-    try {
-        asio::write(socket_, asio::buffer(&packet, sizeof(Packet)));
-    } catch (const std::exception& ex) {
-        std::cerr << "SendPosition failed: " << ex.what() << "\n";
+    if (socket_.is_open())
+    {
+        std::error_code ec;
+        socket_.close(ec);
+    }
+
+    if (readThread_.joinable())
+    {
+        readThread_.join();
     }
 }
+bool NetworkClient::IsConnected() const
+{
+    return connected_;
+}
+void NetworkClient::SendMove(float x, float y)
+{
+    if (!connected_)
+        return;
 
-std::unordered_map<int, RemoteSnapshot> NetworkClient::GetSnapshots() const {
-    std::lock_guard<std::mutex> lock(snapshotMutex_);
-    return snapshots_;
+    std::ostringstream out;
+    out << "MOVE " << x << " " << y << "\n";
+
+    std::error_code ec;
+    asio::write(socket_, asio::buffer(out.str()), ec);
 }
 
-int NetworkClient::GetLocalId() const {
-    std::lock_guard<std::mutex> lock(idMutex_);
+int NetworkClient::GetLocalId() const
+{
     return localId_;
 }
 
-bool NetworkClient::IsConnected() const {
-    return connected_;
+std::unordered_map<int, RemotePlayer> NetworkClient::GetRemotePlayers() const
+{
+    std::lock_guard<std::mutex> lock(playersMutex_);
+    return remotePlayers_;
 }
 
-void NetworkClient::BeginRead() {
-    asio::async_read(socket_, asio::buffer(&readBuffer_, sizeof(Packet)),
-        [this](std::error_code ec, std::size_t) {
-            if (!ec) {
-                if (readBuffer_.type == PacketType::Join) {
-                    std::lock_guard<std::mutex> lock(idMutex_);
-                    localId_ = readBuffer_.id;
-                } else if (readBuffer_.type == PacketType::State) {
-                    std::lock_guard<std::mutex> lock(snapshotMutex_);
-                    snapshots_[readBuffer_.id] = RemoteSnapshot{readBuffer_.id, readBuffer_.x, readBuffer_.y};
-                }
-                BeginRead();
-            } else {
-                std::cerr << "Network read ended.\n";
+void NetworkClient::ReadLoop()
+{
+    try
+    {
+        asio::streambuf buffer;
+
+        while (connected_)
+        {
+            asio::read_until(socket_, buffer, '\n');
+
+            std::istream input(&buffer);
+            std::string line;
+            std::getline(input, line);
+
+            HandleLine(line);
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Read loop ended: " << e.what() << "\n";
+        connected_ = false;
+    }
+}
+
+
+void NetworkClient::HandleLine(const std::string &line)
+{
+    if (line.rfind("ID ", 0) == 0)
+    {
+        localId_ = std::stoi(line.substr(3));
+        std::cout << "Assigned player id: " << localId_ << "\n";
+        return;
+    }
+
+    if (line.rfind("SNAPSHOT ", 0) == 0)
+    {
+        std::unordered_map<int, RemotePlayer> nextPlayers;
+
+        std::string payload = line.substr(9);
+        std::stringstream ss(payload);
+        std::string token;
+
+        while (std::getline(ss, token, ';'))
+        {
+            if (token.empty())
+                continue;
+
+            std::stringstream item(token);
+            std::string part;
+
+            std::vector<std::string> parts;
+            while (std::getline(item, part, ','))
+            {
+                parts.push_back(part);
             }
-        });
+
+            if (parts.size() == 3)
+            {
+                RemotePlayer p;
+                p.id = std::stoi(parts[0]);
+                p.x = std::stof(parts[1]);
+                p.y = std::stof(parts[2]);
+                nextPlayers[p.id] = p;
+            }
+        }
+
+        std::lock_guard<std::mutex> lock(playersMutex_);
+        remotePlayers_ = std::move(nextPlayers);
+    }
 }

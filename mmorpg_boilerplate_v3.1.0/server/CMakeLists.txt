@@ -19,12 +19,18 @@ add_executable(TopDownMMOServer
     src/main.cpp
 )
 
+
 target_include_directories(TopDownMMOServer PRIVATE
     ${CMAKE_SOURCE_DIR}/shared
     ${CMAKE_SOURCE_DIR}/third_party/asio/include
 )
 
+target_compile_definitions(TopDownMMOServer PRIVATE
+    _WIN32_WINNT=0x0601
+)
+
 target_link_libraries(TopDownMMOServer PRIVATE 
     ws2_32
     mswsock
-    advapi32)
+    advapi32
+)

@@ -82,7 +82,8 @@ World::~World() {
 //
 // The server only sends positions in this prototype.
 // The client infers facing direction and walking animation from the change in position.
-void World::UpdateRemotePlayers(const std::unordered_map<int, RemoteSnapshot>& snapshots, int localId, float dt) {
+void World::UpdateRemotePlayers(const std::unordered_map<int, RemotePlayer> &snapshots, int localId, float dt)
+{
     remotePlayers_.erase(
         std::remove_if(remotePlayers_.begin(), remotePlayers_.end(),
             [&](const RemoteActor& remote) {
@@ -246,6 +247,10 @@ void World::Draw() const {
     }
 
     DrawPlayer();
+    for (const auto &remote : remotePlayers_)
+    {
+        DrawRemotePlayer(remote);
+    }
     EndMode2D();
     DrawHud();
     DrawMinimap();

@@ -23,37 +23,40 @@
 #include <thread>
 #include <unordered_map>
 
-// Latest server snapshot for one remote player.
-struct RemoteSnapshot {
-    int id = 0;
-    float x = 0.0f;
-    float y = 0.0f;
+struct RemotePlayer
+{
+    int id{};
+    float x{};
+    float y{};
 };
 
-class NetworkClient {
+class NetworkClient
+{
 public:
     NetworkClient();
     ~NetworkClient();
 
-    bool Connect(const char* host = "127.0.0.1", const char* port = "54000");
+    bool Connect(const std::string &host, unsigned short port);
     void Disconnect();
-    void SendPosition(float x, float y);
-    std::unordered_map<int, RemoteSnapshot> GetSnapshots() const;
-    int GetLocalId() const;
+
     bool IsConnected() const;
+    void SendMove(float x, float y);
+
+    int GetLocalId() const;
+    std::unordered_map<int, RemotePlayer> GetRemotePlayers() const;
 
 private:
-    void BeginRead();
+    void ReadLoop();
+    void HandleLine(const std::string &line);
 
-    asio::io_context io_;
+private:
+    asio::io_context ioContext_;
     asio::ip::tcp::socket socket_;
-    std::thread ioThread_;
-    Packet readBuffer_{};
+    std::thread readThread_;
 
-    mutable std::mutex snapshotMutex_;
-    std::unordered_map<int, RemoteSnapshot> snapshots_;
+    std::atomic<bool> connected_{false};
+    int localId_ = -1;
 
-    mutable std::mutex idMutex_;
-    int localId_ = 0;
-    bool connected_ = false;
+    mutable std::mutex playersMutex_;
+    std::unordered_map<int, RemotePlayer> remotePlayers_;
 };

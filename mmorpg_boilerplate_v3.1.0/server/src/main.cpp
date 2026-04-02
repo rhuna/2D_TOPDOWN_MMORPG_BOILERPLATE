@@ -1,101 +1,149 @@
-#define ASIO_STANDALONE
 #include <asio.hpp>
-#include <functional>
-#include <iostream>
-#include <memory>
 #include <unordered_map>
 #include <vector>
-#include "Protocol.h"
+#include <thread>
+#include <mutex>
+#include <sstream>
+#include <iostream>
+
 using asio::ip::tcp;
 
-struct PlayerState {
-    int id = 0;
-    float x = 100.0f;
-    float y = 100.0f;
+struct PlayerState
+{
+    int id{};
+    float x{};
+    float y{};
 };
 
-class Session;
+std::mutex g_mutex;
 std::unordered_map<int, PlayerState> g_players;
-std::vector<std::shared_ptr<Session>> g_sessions;
+std::vector<std::shared_ptr<tcp::socket>> g_clients;
+int g_nextId = 1;
 
-class Session : public std::enable_shared_from_this<Session> {
-public:
-    explicit Session(tcp::socket socket) : socket_(std::move(socket)) {}
-    void Start() {
-        SendWelcome();
-        BroadcastAllStates();
-        Read();
+std::string BuildSnapshot()
+{
+    std::lock_guard<std::mutex> lock(g_mutex);
+
+    std::ostringstream out;
+    out << "SNAPSHOT ";
+    for (const auto& [id, p] : g_players)
+    {
+        out << p.id << "," << p.x << "," << p.y << ";";
     }
-    void Send(const Packet& packet) {
-        asio::async_write(socket_, asio::buffer(&packet, sizeof(Packet)), [](std::error_code, std::size_t) {});
+    out << "\n";
+    return out.str();
+}
+
+void BroadcastSnapshot()
+{
+    const std::string msg = BuildSnapshot();
+
+    std::lock_guard<std::mutex> lock(g_mutex);
+    for (auto& client : g_clients)
+    {
+        if (client && client->is_open())
+        {
+            std::error_code ec;
+            asio::write(*client, asio::buffer(msg), ec);
+        }
     }
-    int id = 0;
-private:
-    void SendWelcome() {
-        Packet welcome{};
-        welcome.type = PacketType::Join;
-        welcome.id = id;
-        welcome.x = g_players[id].x;
-        welcome.y = g_players[id].y;
-        Send(welcome);
+}
+
+void HandleClient(std::shared_ptr<tcp::socket> socket)
+{
+    int myId = 0;
+
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        myId = g_nextId++;
+        g_players[myId] = PlayerState{myId, 200.0f, 200.0f};
+        g_clients.push_back(socket);
     }
-    void Read() {
-        auto self = shared_from_this();
-        asio::async_read(socket_, asio::buffer(&buffer_, sizeof(Packet)), [this, self](std::error_code ec, std::size_t) {
-            if (!ec) {
-                if (buffer_.type == PacketType::Move) {
-                    g_players[id].x = buffer_.x;
-                    g_players[id].y = buffer_.y;
-                    BroadcastAllStates();
+
+    {
+        std::string welcome = "ID " + std::to_string(myId) + "\n";
+        asio::write(*socket, asio::buffer(welcome));
+    }
+
+    BroadcastSnapshot();
+
+    try
+    {
+        asio::streambuf buffer;
+
+        while (true)
+        {
+            std::size_t bytes = asio::read_until(*socket, buffer, '\n');
+            (void)bytes;
+
+            std::istream input(&buffer);
+            std::string line;
+            std::getline(input, line);
+
+            // Expected: MOVE x y
+            if (line.rfind("MOVE ", 0) == 0)
+            {
+                std::istringstream iss(line.substr(5));
+                float x = 0.0f;
+                float y = 0.0f;
+                iss >> x >> y;
+
+                {
+                    std::lock_guard<std::mutex> lock(g_mutex);
+                    auto it = g_players.find(myId);
+                    if (it != g_players.end())
+                    {
+                        it->second.x = x;
+                        it->second.y = y;
+                    }
                 }
-                Read();
-            } else {
-                std::cout << "Client disconnected: " << id << "\n";
-                g_players.erase(id);
-            }
-        });
-    }
-    void BroadcastAllStates() {
-        for (const auto& [playerId, player] : g_players) {
-            Packet packet{};
-            packet.type = PacketType::State;
-            packet.id = playerId;
-            packet.x = player.x;
-            packet.y = player.y;
-            for (auto& session : g_sessions) {
-                session->Send(packet);
+
+                BroadcastSnapshot();
             }
         }
     }
-    tcp::socket socket_;
-    Packet buffer_{};
-};
+    catch (const std::exception&)
+    {
+        std::lock_guard<std::mutex> lock(g_mutex);
+        g_players.erase(myId);
 
-int main() {
-    try {
+        g_clients.erase(
+            std::remove_if(
+                g_clients.begin(),
+                g_clients.end(),
+                [&](const std::shared_ptr<tcp::socket>& s)
+                {
+                    return s.get() == socket.get();
+                }),
+            g_clients.end());
+    }
+
+    BroadcastSnapshot();
+}
+
+int main()
+{
+    try
+    {
         asio::io_context io;
-        tcp::acceptor acceptor(io, tcp::endpoint(tcp::v4(), 54000));
-        int nextId = 1;
-        std::cout << "Prototype server listening on port 54000\n";
-        std::function<void()> acceptLoop;
-        acceptLoop = [&]() {
-            acceptor.async_accept([&](std::error_code ec, tcp::socket socket) {
-                if (!ec) {
-                    auto session = std::make_shared<Session>(std::move(socket));
-                    session->id = nextId++;
-                    g_players[session->id] = PlayerState{session->id, 100.0f + 20.0f * static_cast<float>(session->id), 100.0f};
-                    g_sessions.push_back(session);
-                    session->Start();
-                    std::cout << "Client connected with id " << session->id << "\n";
-                }
-                acceptLoop();
-            });
-        };
-        acceptLoop();
-        io.run();
-    } catch (const std::exception& ex) {
-        std::cerr << "Server error: " << ex.what() << "\n";
+        tcp::acceptor acceptor(io, tcp::endpoint(tcp::v4(), 7777));
+
+        std::cout << "Server running on port 7777...\n";
+
+        while (true)
+        {
+            auto socket = std::make_shared<tcp::socket>(io);
+            acceptor.accept(*socket);
+
+            std::cout << "Client connected\n";
+            std::thread(HandleClient, socket).detach();
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Server error: " << e.what() << "\n";
         return 1;
     }
+
     return 0;
 }
