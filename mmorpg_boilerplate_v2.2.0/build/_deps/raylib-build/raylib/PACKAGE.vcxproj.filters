@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\dev\MMORPG_boilerplate\2D_TOPDOWN_MMORPG_BOILERPLATE\mmorpg_boilerplate_v2.2.0\build\CMakeFiles\7b352ff21f8566237e5de8b003f18253\PACKAGE_force.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{7F08FF8B-AD0C-346E-BBFF-5FF37DBF4CFB}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

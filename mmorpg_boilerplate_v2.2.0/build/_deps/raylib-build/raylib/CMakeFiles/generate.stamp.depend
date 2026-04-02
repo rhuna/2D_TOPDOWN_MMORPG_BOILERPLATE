@@ -1,0 +1,19 @@
+# CMake generation dependency list for this directory.
+C:/Program Files/CMake/share/cmake-4.1/Modules/CPack.cmake
+C:/Program Files/CMake/share/cmake-4.1/Modules/CPackComponent.cmake
+C:/Program Files/CMake/share/cmake-4.1/Modules/FindOpenGL.cmake
+C:/Program Files/CMake/share/cmake-4.1/Modules/FindPackageHandleStandardArgs.cmake
+C:/Program Files/CMake/share/cmake-4.1/Modules/FindPackageMessage.cmake
+C:/Program Files/CMake/share/cmake-4.1/Modules/GNUInstallDirs.cmake
+C:/Program Files/CMake/share/cmake-4.1/Templates/CPackConfig.cmake.in
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/cmake/CompileDefinitions.cmake
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/cmake/GlfwImport.cmake
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/cmake/InstallConfigurations.cmake
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/cmake/JoinPaths.cmake
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/cmake/LibraryConfigurations.cmake
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/cmake/LibraryPathToLinkerFlags.cmake
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/cmake/PackConfigurations.cmake
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/cmake/PopulateConfigVariablesLocally.cmake
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/cmake/raylib-config-version.cmake
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/raylib.pc.in
+C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-src/src/CMakeLists.txt

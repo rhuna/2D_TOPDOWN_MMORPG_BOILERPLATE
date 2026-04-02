@@ -1,0 +1,10 @@
+^C:\DEV\MMORPG_BOILERPLATE\2D_TOPDOWN_MMORPG_BOILERPLATE\MMORPG_BOILERPLATE_V2.2.0\BUILD\_DEPS\RAYLIB-SRC\SRC\EXTERNAL\GLFW\SRC\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0 -BC:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build --check-stamp-file C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.2.0/build/_deps/raylib-build/raylib/external/glfw/src/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
