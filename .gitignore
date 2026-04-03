@@ -1,142 +1,89 @@
 
-# =========================
-
-# Build directories
-
-# =========================
-
-/build/
-/build-*/
-/cmake-build-*/
-/out/
-/bin/
-/lib/
-
-# =========================
-
-# CMake files
-
-# =========================
-
-CMakeCache.txt
+# ----------------------------
+# Build folders
+# ----------------------------
+build/
+build-*/
+out/
+bin/
+dist/
+cmake-build-*/
 CMakeFiles/
-cmake_install.cmake
+CMakeCache.txt
+compile_commands.json
+Testing/
+_deps/
+
+# ----------------------------
+# CMake / generated files
+# ----------------------------
+*.cmake.user
 Makefile
-*.cmake
+install_manifest.txt
 
-# =========================
-
-# Generated dependencies (FetchContent, raylib, etc.)
-
-# =========================
-
-/build/_deps/
-/_deps/
-
-# =========================
-
-# Compiled binaries
-
-# =========================
-
+# ----------------------------
+# Binaries / libraries
+# ----------------------------
 *.exe
 *.dll
 *.so
 *.dylib
 *.a
 *.lib
-
-# =========================
-
-# Object files
-
-# =========================
-
-*.o
 *.obj
-
-# =========================
-
-# Debug / release artifacts
-
-# =========================
-
+*.o
 *.pdb
 *.ilk
+*.exp
+
+# ----------------------------
+# Logs / temp / cache
+# ----------------------------
 *.log
-
-# =========================
-
-# MSYS / MinGW artifacts
-
-# =========================
-
-*.stackdump
-
-# =========================
-
-# Visual Studio (if ever used)
-
-# =========================
-
-.vs/
-*.vcxproj*
-*.sln
-*.user
-
-# =========================
-
-# VS Code
-
-# =========================
-
-.vscode/
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-
-# =========================
-
-# OS junk
-
-# =========================
-
-.DS_Store
-Thumbs.db
-
-# =========================
-
-# Temporary files
-
-# =========================
-
 *.tmp
 *.temp
-*.swp
-*~
+.cache/
+.cache-loader/
+*.stackdump
 
-# =========================
+# ----------------------------
+# IDE/editor files
+# ----------------------------
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
 
-# Logs
+# ----------------------------
+# OS junk
+# ----------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# =========================
+# ----------------------------
+# Python cache if any tools/scripts exist
+# ----------------------------
+__pycache__/
+*.pyc
+.venv/
 
-*.log
+# ----------------------------
+# Large generated game content
+# ----------------------------
+*.zip
+*.7z
 
-# =========================
+# Keep source assets, but ignore exported/generated asset caches
+assets/cache/
+assets/generated/
 
-# Runtime generated files
-
-# =========================
-
-/logs/
-/saves/
-/temp/
-
-# =========================
-
-# DLL copies (if you copy MSYS2 DLLs into build)
-
-# =========================
-
-build/**/*.dll
+# ----------------------------
+# Optional: ignore local config overrides
+# ----------------------------
+.env
+.env.local
+local_settings.json
