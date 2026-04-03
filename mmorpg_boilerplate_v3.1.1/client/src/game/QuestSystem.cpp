@@ -4,17 +4,6 @@
 
 using json = nlohmann::json;
 
-static QuestEventType ParseEventType(const std::string &type)
-{
-    if (type == "kill")
-        return QuestEventType::EnemyKilled;
-    if (type == "talk")
-        return QuestEventType::NpcTalkedTo;
-    if (type == "collect")
-        return QuestEventType::ItemCollected;
-    return QuestEventType::RegionEntered;
-}
-
 bool QuestSystem::LoadFromJson(const std::string &filePath)
 {
     std::ifstream file(filePath);
@@ -25,6 +14,10 @@ bool QuestSystem::LoadFromJson(const std::string &filePath)
     file >> root;
 
     definitions_.clear();
+    storyFlags_.clear();
+
+    if (!root.contains("quests") || !root["quests"].is_array())
+        return false;
 
     for (const auto &q : root["quests"])
     {
@@ -48,15 +41,27 @@ bool QuestSystem::LoadFromJson(const std::string &filePath)
                 def.nextQuestIds.push_back(item.get<std::string>());
         }
 
-        if (q.contains("objectives"))
+        if (q.contains("stages"))
         {
-            for (const auto &obj : q["objectives"])
+            for (const auto &stageJson : q["stages"])
             {
-                QuestObjectiveDefinition objective;
-                objective.type = obj.value("type", "");
-                objective.targetId = obj.value("targetId", "");
-                objective.requiredCount = obj.value("requiredCount", 1);
-                def.objectives.push_back(objective);
+                QuestStageDefinition stage;
+                stage.id = stageJson.value("id", "");
+                stage.description = stageJson.value("description", "");
+
+                if (stageJson.contains("objectives"))
+                {
+                    for (const auto &obj : stageJson["objectives"])
+                    {
+                        QuestObjectiveDefinition objective;
+                        objective.type = obj.value("type", "");
+                        objective.targetId = obj.value("targetId", "");
+                        objective.requiredCount = obj.value("requiredCount", 1);
+                        stage.objectives.push_back(objective);
+                    }
+                }
+
+                def.stages.push_back(stage);
             }
         }
 
@@ -68,7 +73,34 @@ bool QuestSystem::LoadFromJson(const std::string &filePath)
             def.rewards.itemCount = q["rewards"].value("itemCount", 0);
         }
 
-        definitions_[def.id] = def;
+        if (q.contains("branchChoices"))
+        {
+            for (const auto &choiceJson : q["branchChoices"])
+            {
+                QuestBranchChoiceDefinition choice;
+                choice.id = choiceJson.value("id", "");
+                choice.text = choiceJson.value("text", "");
+
+                if (choiceJson.contains("setFlags"))
+                {
+                    for (const auto &f : choiceJson["setFlags"])
+                        choice.setFlags.push_back(f.get<std::string>());
+                }
+
+                if (choiceJson.contains("unlockQuestIds"))
+                {
+                    for (const auto &uq : choiceJson["unlockQuestIds"])
+                        choice.unlockQuestIds.push_back(uq.get<std::string>());
+                }
+
+                def.branchChoices.push_back(choice);
+            }
+        }
+
+        if (!def.id.empty())
+        {
+            definitions_[def.id] = def;
+        }
     }
 
     InitializeStates();
@@ -83,8 +115,18 @@ void QuestSystem::InitializeStates()
     {
         QuestState state;
         state.questId = id;
-        state.status = def.prerequisiteQuestIds.empty() ? QuestStatus::Available : QuestStatus::Locked;
-        state.objectives.resize(def.objectives.size());
+        state.status = def.prerequisiteQuestIds.empty()
+                           ? QuestStatus::Available
+                           : QuestStatus::Locked;
+        state.currentStageIndex = 0;
+
+        for (const auto &stageDef : def.stages)
+        {
+            QuestStageState stageState;
+            stageState.objectives.resize(stageDef.objectives.size());
+            state.stages.push_back(stageState);
+        }
+
         states_[id] = state;
     }
 }
@@ -98,19 +140,21 @@ void QuestSystem::UpdateAvailability()
 
         const auto &def = definitions_.at(id);
 
-        bool allMet = true;
+        bool allPrereqsMet = true;
         for (const auto &prereq : def.prerequisiteQuestIds)
         {
             auto it = states_.find(prereq);
             if (it == states_.end() || it->second.status != QuestStatus::Rewarded)
             {
-                allMet = false;
+                allPrereqsMet = false;
                 break;
             }
         }
 
-        if (allMet)
+        if (allPrereqsMet)
+        {
             state.status = QuestStatus::Available;
+        }
     }
 }
 
@@ -127,6 +171,7 @@ bool QuestSystem::AcceptQuest(const std::string &questId)
         return false;
 
     it->second.status = QuestStatus::Active;
+    it->second.currentStageIndex = 0;
     return true;
 }
 
@@ -156,10 +201,16 @@ void QuestSystem::NotifyEvent(const QuestEvent &event)
 
         const auto &def = definitions_.at(id);
 
-        for (std::size_t i = 0; i < def.objectives.size(); ++i)
+        if (state.currentStageIndex < 0 || state.currentStageIndex >= static_cast<int>(def.stages.size()))
+            continue;
+
+        const auto &currentStageDef = def.stages[state.currentStageIndex];
+        auto &currentStageState = state.stages[state.currentStageIndex];
+
+        for (std::size_t i = 0; i < currentStageDef.objectives.size(); ++i)
         {
-            auto &objectiveState = state.objectives[i];
-            const auto &objectiveDef = def.objectives[i];
+            auto &objectiveState = currentStageState.objectives[i];
+            const auto &objectiveDef = currentStageDef.objectives[i];
 
             if (objectiveState.complete)
                 continue;
@@ -175,11 +226,11 @@ void QuestSystem::NotifyEvent(const QuestEvent &event)
             }
         }
 
-        CheckCompletion(id);
+        CheckStageProgress(id);
     }
 }
 
-void QuestSystem::CheckCompletion(const std::string &questId)
+void QuestSystem::CheckStageProgress(const std::string &questId)
 {
     auto &state = states_.at(questId);
     const auto &def = definitions_.at(questId);
@@ -187,16 +238,73 @@ void QuestSystem::CheckCompletion(const std::string &questId)
     if (state.status != QuestStatus::Active)
         return;
 
-    for (std::size_t i = 0; i < def.objectives.size(); ++i)
+    if (state.currentStageIndex < 0 || state.currentStageIndex >= static_cast<int>(def.stages.size()))
+        return;
+
+    auto &currentStageState = state.stages[state.currentStageIndex];
+    const auto &currentStageDef = def.stages[state.currentStageIndex];
+
+    for (std::size_t i = 0; i < currentStageDef.objectives.size(); ++i)
     {
-        if (!state.objectives[i].complete)
+        if (!currentStageState.objectives[i].complete)
             return;
     }
 
-    state.status = QuestStatus::Completed;
+    currentStageState.complete = true;
+    state.currentStageIndex++;
+
+    if (state.currentStageIndex >= static_cast<int>(def.stages.size()))
+    {
+        if (!def.branchChoices.empty())
+            state.status = QuestStatus::AwaitingChoice;
+        else
+            state.status = QuestStatus::Completed;
+    }
 }
 
-bool QuestSystem::RewardQuest(const std::string &questId, int &outGold, int &outXp, std::string &outItemId, int &outItemCount)
+bool QuestSystem::ChooseBranch(const std::string &questId, const std::string &choiceId)
+{
+    auto stateIt = states_.find(questId);
+    if (stateIt == states_.end() || stateIt->second.status != QuestStatus::AwaitingChoice)
+        return false;
+
+    auto defIt = definitions_.find(questId);
+    if (defIt == definitions_.end())
+        return false;
+
+    const auto &def = defIt->second;
+
+    for (const auto &choice : def.branchChoices)
+    {
+        if (choice.id == choiceId)
+        {
+            stateIt->second.chosenBranchId = choiceId;
+
+            for (const auto &flag : choice.setFlags)
+                storyFlags_.insert(flag);
+
+            for (const auto &unlockQuestId : choice.unlockQuestIds)
+            {
+                auto unlockIt = states_.find(unlockQuestId);
+                if (unlockIt != states_.end() && unlockIt->second.status == QuestStatus::Locked)
+                {
+                    unlockIt->second.status = QuestStatus::Available;
+                }
+            }
+
+            stateIt->second.status = QuestStatus::Completed;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool QuestSystem::RewardQuest(const std::string &questId,
+                              int &outGold,
+                              int &outXp,
+                              std::string &outItemId,
+                              int &outItemCount)
 {
     auto it = states_.find(questId);
     if (it == states_.end() || it->second.status != QuestStatus::Completed)
@@ -217,13 +325,26 @@ bool QuestSystem::RewardQuest(const std::string &questId, int &outGold, int &out
 bool QuestSystem::IsQuestCompleted(const std::string &questId) const
 {
     auto it = states_.find(questId);
-    return it != states_.end() && (it->second.status == QuestStatus::Completed || it->second.status == QuestStatus::Rewarded);
+    return it != states_.end() &&
+           (it->second.status == QuestStatus::Completed ||
+            it->second.status == QuestStatus::Rewarded);
 }
 
 bool QuestSystem::IsQuestActive(const std::string &questId) const
 {
     auto it = states_.find(questId);
     return it != states_.end() && it->second.status == QuestStatus::Active;
+}
+
+bool QuestSystem::IsAwaitingChoice(const std::string &questId) const
+{
+    auto it = states_.find(questId);
+    return it != states_.end() && it->second.status == QuestStatus::AwaitingChoice;
+}
+
+bool QuestSystem::HasFlag(const std::string &flag) const
+{
+    return storyFlags_.find(flag) != storyFlags_.end();
 }
 
 const QuestDefinition *QuestSystem::GetDefinition(const std::string &questId) const
@@ -249,13 +370,18 @@ std::vector<const QuestState *> QuestSystem::GetActiveQuests() const
     return result;
 }
 
-std::vector<const QuestState *> QuestSystem::GetAvailableQuests() const
+std::vector<const QuestState *> GetStatesByStatus(const std::unordered_map<std::string, QuestState> &states, QuestStatus status)
 {
     std::vector<const QuestState *> result;
-    for (const auto &[id, state] : states_)
+    for (const auto &[id, state] : states)
     {
-        if (state.status == QuestStatus::Available)
+        if (state.status == status)
             result.push_back(&state);
     }
     return result;
+}
+
+std::vector<const QuestState *> QuestSystem::GetAvailableQuests() const
+{
+    return GetStatesByStatus(states_, QuestStatus::Available);
 }

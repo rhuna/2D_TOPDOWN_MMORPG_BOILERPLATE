@@ -35,6 +35,22 @@ struct TileAtlas {
     Rectangle sword{};
 };
 
+struct ChoiceUiState
+{
+    bool visible = false;
+    std::string questId;
+    std::vector<std::string> choiceIds;
+    std::vector<std::string> choiceTexts;
+    int selectedIndex = 0;
+};
+
+struct ShopUiState
+{
+    bool visible = false;
+    int selectedIndex = 0;
+    int merchantIndex = -1; // index into npcs_
+};
+
 struct RemoteSnapshot;
 
 class World {
@@ -75,6 +91,15 @@ private:
     const AnimationClip& SelectClip(const DirectionalSprite& spriteSet, Direction facing, bool walking) const;
     const AtlasFrame& ResolveFrame(const AnimationClip& clip, float animClock) const;
     int TileVariantIndex(int x, int y, int count) const;
+    void UpdateChoiceUi();
+    void DrawChoiceUi() const;
+    void OpenChoiceUi(const std::string &questId);
+    void CloseChoiceUi();
+    void HandleBuildingTransitions();
+    void UpdateShopUi();
+    void DrawShopUi() const;
+    void OpenShopUi(int merchantIndex);
+    void CloseShopUi();
 
 private:
     std::vector<std::string> map_;
@@ -99,4 +124,8 @@ private:
     DirectionalSprite playerAtlas_;
     DirectionalSprite npcAtlas_;
     DirectionalSprite slimeAtlas_;
+    ChoiceUiState choiceUi_;
+    std::vector<BuildingDoor> buildingDoors_;
+    std::vector<ExitDoor> exitDoors_;
+    ShopUiState shopUi_;
 };

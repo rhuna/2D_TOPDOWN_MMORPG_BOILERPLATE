@@ -66,12 +66,29 @@ struct Enemy : Actor {
     float attackTimer = 0.0f;
 };
 
+struct RemoteActor : Actor
+{
+    int id{};
+    Vector2 targetPosition{};
+    int hp{20};
+    std::string name;
+};
+struct ShopItem
+{
+    std::string name;
+    int price = 0;
+    int amount = 1;
+};
 // Non-player character.
-struct Npc : Actor {
+struct Npc : Actor
+{
     std::string name;
     std::string idleText;
     std::string questText;
     std::string regionName = "Roadside";
+
+    bool isMerchant = false;
+    std::vector<ShopItem> shopStock;
 };
 
 // World item drop.
@@ -82,13 +99,21 @@ struct Drop {
     bool taken = false;
 };
 
-struct RemoteActor : Actor
+
+
+struct BuildingDoor
 {
-    int id{};
-    Vector2 targetPosition{};
-    int hp{20};
-    std::string name;
+    Rectangle trigger{};    // world-space trigger near the door
+    Vector2 insideSpawn{};  // where the player appears inside
+    Vector2 outsideSpawn{}; // where the player appears when exiting
+    std::string buildingId;
 };
 
+struct ExitDoor
+{
+    Rectangle trigger{}; // inside exit trigger
+    Vector2 outsideSpawn{};
+    std::string buildingId;
+};
 // Client-side visual representation of a remote player.
 

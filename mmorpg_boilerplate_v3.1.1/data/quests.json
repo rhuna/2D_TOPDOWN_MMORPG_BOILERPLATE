@@ -2,38 +2,112 @@
     "quests": [{
             "id": "main_001",
             "title": "Slime Cleanup",
-            "description": "Defeat 3 slimes for Elder Rowan, then report back.",
+            "description": "Help Elder Rowan secure the village road.",
             "giverNpcId": "elder_rowan",
             "completerNpcId": "elder_rowan",
             "mainStory": true,
             "prerequisiteQuestIds": [],
-            "nextQuestIds": ["main_002"],
-            "objectives": [
-                { "type": "kill", "targetId": "slime", "requiredCount": 3 },
-                { "type": "talk", "targetId": "elder_rowan", "requiredCount": 1 }
+            "nextQuestIds": [],
+            "stages": [{
+                    "id": "accept_orders",
+                    "description": "Speak to Elder Rowan.",
+                    "objectives": [
+                        { "type": "talk", "targetId": "elder_rowan", "requiredCount": 1 }
+                    ]
+                },
+                {
+                    "id": "hunt_slimes",
+                    "description": "Defeat 3 slimes.",
+                    "objectives": [
+                        { "type": "kill", "targetId": "slime", "requiredCount": 3 }
+                    ]
+                },
+                {
+                    "id": "report_back",
+                    "description": "Return to Elder Rowan.",
+                    "objectives": [
+                        { "type": "talk", "targetId": "elder_rowan", "requiredCount": 1 }
+                    ]
+                }
             ],
             "rewards": {
                 "gold": 25,
                 "xp": 50,
                 "itemId": "bronze_blade",
                 "itemCount": 1
-            }
+            },
+            "branchChoices": [{
+                    "id": "road_to_wanderer",
+                    "text": "Send me to the crossroads.",
+                    "setFlags": ["path_crossroads"],
+                    "unlockQuestIds": ["main_002"]
+                },
+                {
+                    "id": "road_to_healer",
+                    "text": "I want to help the healer.",
+                    "setFlags": ["path_healer"],
+                    "unlockQuestIds": ["side_001"]
+                }
+            ]
         },
         {
             "id": "main_002",
             "title": "A Road Beyond the Village",
-            "description": "Speak to the Wanderer at the crossroads.",
+            "description": "Travel beyond the village and meet the Wanderer.",
             "giverNpcId": "elder_rowan",
             "completerNpcId": "wanderer",
             "mainStory": true,
-            "prerequisiteQuestIds": ["main_001"],
+            "prerequisiteQuestIds": [],
             "nextQuestIds": [],
-            "objectives": [
-                { "type": "talk", "targetId": "wanderer", "requiredCount": 1 }
+            "stages": [{
+                    "id": "receive_task",
+                    "description": "Speak to Elder Rowan again.",
+                    "objectives": [
+                        { "type": "talk", "targetId": "elder_rowan", "requiredCount": 1 }
+                    ]
+                },
+                {
+                    "id": "find_wanderer",
+                    "description": "Speak to the Wanderer.",
+                    "objectives": [
+                        { "type": "talk", "targetId": "wanderer", "requiredCount": 1 }
+                    ]
+                }
             ],
             "rewards": {
                 "gold": 10,
                 "xp": 25,
+                "itemId": "",
+                "itemCount": 0
+            }
+        },
+        {
+            "id": "side_001",
+            "title": "Medicinal Herbs",
+            "description": "Gather herbs for the village healer.",
+            "giverNpcId": "elder_rowan",
+            "completerNpcId": "elder_rowan",
+            "mainStory": false,
+            "prerequisiteQuestIds": [],
+            "nextQuestIds": [],
+            "stages": [{
+                    "id": "collect_herbs",
+                    "description": "Collect 3 herbs.",
+                    "objectives": [
+                        { "type": "collect", "targetId": "herb", "requiredCount": 3 }
+                    ]
+                },
+                {
+                    "id": "return_to_elder",
+                    "description": "Return to Elder Rowan.",
+                    "objectives": [
+                        { "type": "talk", "targetId": "elder_rowan", "requiredCount": 1 }
+                    ]
+                }
+            ],
+            "rewards": {
+                "gold": 20,
+                "xp": 35,
                 "itemId": "",
                 "itemCount": 0
             }

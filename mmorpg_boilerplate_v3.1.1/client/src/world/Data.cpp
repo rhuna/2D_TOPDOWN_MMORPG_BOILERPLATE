@@ -173,6 +173,25 @@ std::vector<std::string> BuildMap() {
     setTile(22, 22, 'P');
     setTile(28, 22, 'E');
 
+    // ------------------------------------------------------------
+    // Starter village shop building in the overworld
+    // ------------------------------------------------------------
+    // Building footprint near the starter village.
+    // 'B' marks the door tile.
+    fillRect(32, 18, 8, 6, '#'); // outer building
+    fillRect(33, 19, 6, 4, '.'); // interior floor area of the building shell
+    setTile(35, 23, 'B');        // front door tile
+
+    // ------------------------------------------------------------
+    // Hidden interior room for the shop
+    // ------------------------------------------------------------
+    // This is a fake "indoor map" placed elsewhere on the big map.
+    // The player is teleported here when entering the building.
+    fillRect(300, 20, 12, 10, '#'); // walls
+    fillRect(301, 21, 10, 8, '.');  // floor
+    setTile(306, 28, 'D');          // exit door tile
+    setTile(306, 24, 'M');          // merchant NPC
+
     const std::vector<std::pair<int, int>> npcPositions = {
         {84, 72}, {138, 128}, {196, 184}, {248, 240}, {292, 292}, {240, 72}, {80, 240}
     };
@@ -211,6 +230,15 @@ std::vector<std::string> BuildMap() {
     for (const auto& [x, y] : npcPositions) {
         setTile(x, y, 'N');
     }
+    // Restore shop building + interior markers
+    fillRect(32, 18, 8, 6, '#');
+    fillRect(33, 19, 6, 4, '.');
+    setTile(35, 23, 'B');
+
+    fillRect(300, 20, 12, 10, '#');
+    fillRect(301, 21, 10, 8, '.');
+    setTile(306, 28, 'D');
+    setTile(306, 24, 'M');
 
     return map;
 }

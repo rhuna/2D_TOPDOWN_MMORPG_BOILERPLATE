@@ -9,6 +9,7 @@ enum class QuestStatus
     Available,
     Active,
     Completed,
+    AwaitingChoice,
     Rewarded,
     Failed
 };
@@ -23,8 +24,8 @@ enum class QuestEventType
 
 struct QuestObjectiveDefinition
 {
-    std::string type;     // "kill", "talk", "collect", "visit"
-    std::string targetId; // "slime", "elder_rowan", "wanderer", etc.
+    std::string type;
+    std::string targetId;
     int requiredCount = 1;
 };
 
@@ -34,6 +35,21 @@ struct QuestRewardDefinition
     int xp = 0;
     std::string itemId;
     int itemCount = 0;
+};
+
+struct QuestStageDefinition
+{
+    std::string id;
+    std::string description;
+    std::vector<QuestObjectiveDefinition> objectives;
+};
+
+struct QuestBranchChoiceDefinition
+{
+    std::string id;
+    std::string text;
+    std::vector<std::string> setFlags;
+    std::vector<std::string> unlockQuestIds;
 };
 
 struct QuestDefinition
@@ -50,8 +66,10 @@ struct QuestDefinition
     std::vector<std::string> prerequisiteQuestIds;
     std::vector<std::string> nextQuestIds;
 
-    std::vector<QuestObjectiveDefinition> objectives;
+    std::vector<QuestStageDefinition> stages;
     QuestRewardDefinition rewards;
+
+    std::vector<QuestBranchChoiceDefinition> branchChoices;
 };
 
 struct QuestObjectiveState
@@ -60,11 +78,19 @@ struct QuestObjectiveState
     bool complete = false;
 };
 
+struct QuestStageState
+{
+    std::vector<QuestObjectiveState> objectives;
+    bool complete = false;
+};
+
 struct QuestState
 {
     std::string questId;
     QuestStatus status = QuestStatus::Locked;
-    std::vector<QuestObjectiveState> objectives;
+    int currentStageIndex = 0;
+    std::vector<QuestStageState> stages;
+    std::string chosenBranchId;
 };
 
 struct QuestEvent

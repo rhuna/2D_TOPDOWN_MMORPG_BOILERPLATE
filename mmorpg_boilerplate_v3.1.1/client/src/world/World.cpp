@@ -64,22 +64,67 @@ World::World() {
                 slime.facing = Direction::Left;
                 enemies_.push_back(slime);
                 // The slime quest system will check this field when slimes are killed to track quest progress.
-            } else if (map_[y][x] == 'E' || map_[y][x] == 'N') {
-                // Set up an NPC. In a real game, you'd likely have many different NPCs with different dialogue and quests, and you'd load these from data files instead of hardcoding them.
-                Npc elder;
-                elder.position = worldPos;
-                elder.color = WHITE;
-                elder.hp = 1;
-                elder.maxHp = 1;
-                elder.name = map_[y][x] == 'E' ? "Elder Rowan" : "Wanderer";
-                elder.idleText = map_[y][x] == 'E' ? "The road is safer than it used to be." : "You've entered another travel region. Keep following the roads.";
-                elder.questText = "Please clear out 3 slimes near the village.";
-                elder.regionName = map_[y][x] == 'E' ? "Starter Village" : "Crossroads Camp";
-                elder.facing = Direction::Down;
-                npcs_.push_back(elder);
+            }
+            else if (map_[y][x] == 'E' || map_[y][x] == 'N' || map_[y][x] == 'M')
+            {
+                Npc npc;
+                npc.position = worldPos;
+                npc.color = WHITE;
+                npc.hp = 1;
+                npc.maxHp = 1;
+                npc.facing = Direction::Down;
+
+                if (map_[y][x] == 'E')
+                {
+                    npc.name = "Elder Rowan";
+                    npc.idleText = "The road is safer than it used to be.";
+                    npc.questText = "Please clear out 3 slimes near the village.";
+                    npc.regionName = "Starter Village";
+                }
+                else if (map_[y][x] == 'M')
+                {
+                    npc.name = "Shopkeeper Mira";
+                    npc.idleText = "Take a look at my wares.";
+                    npc.regionName = "Village Shop";
+                    npc.isMerchant = true;
+                    npc.shopStock = {
+                        {"Potion", 10, 1},
+                        {"Herb", 4, 1},
+                        {"Iron Sword", 30, 1}};
+                }
+                else
+                {
+                    npc.name = "Wanderer";
+                    npc.idleText = "You've entered another travel region. Keep following the roads.";
+                    npc.questText = "Please clear out 3 slimes near the village.";
+                    npc.regionName = "Crossroads Camp";
+                }
+
+                npcs_.push_back(npc);
             }
         }
     }
+
+    // Overworld building door -> shop interior
+    buildingDoors_.push_back(BuildingDoor{
+        Rectangle{
+            35.0f * tileSize_,
+            23.0f * tileSize_,
+            static_cast<float>(tileSize_),
+            static_cast<float>(tileSize_)},
+        Vector2{306.0f * tileSize_ + 2.0f, 27.0f * tileSize_ + 2.0f}, // inside spawn
+        Vector2{35.0f * tileSize_ + 2.0f, 24.0f * tileSize_ + 2.0f},  // outside spawn
+        "starter_shop"});
+
+    // Shop interior exit -> overworld
+    exitDoors_.push_back(ExitDoor{
+        Rectangle{
+            306.0f * tileSize_,
+            28.0f * tileSize_,
+            static_cast<float>(tileSize_),
+            static_cast<float>(tileSize_)},
+        Vector2{35.0f * tileSize_ + 2.0f, 24.0f * tileSize_ + 2.0f},
+        "starter_shop"});
 }
 
 // Release GPU texture memory when the world shuts down.
@@ -232,8 +277,23 @@ void World::Update(float dt) {
         targetZoom_ = std::clamp(targetZoom_ + wheel * 0.20f, 1.0f, 3.5f);
     }
 
+    if (choiceUi_.visible)
+    {
+        UpdateChoiceUi();
+        UpdateCamera(dt);
+        return;
+    }
+
+    if (shopUi_.visible)
+    {
+        UpdateShopUi();
+        UpdateCamera(dt);
+        return;
+    }
+
     playerAttackTimer_ -= dt;
     UpdatePlayer(dt);
+    HandleBuildingTransitions();
     UpdateEnemies(dt);
     HandleCombat(dt);
     HandleInteraction();
@@ -272,6 +332,14 @@ void World::Draw() const {
     DrawMinimap();
     if (showBigMap_) {
         DrawWorldMapOverlay();
+    }
+    if (choiceUi_.visible)
+    {
+        DrawChoiceUi();
+    }
+    if (shopUi_.visible)
+    {
+        DrawShopUi();
     }
 }
 
@@ -394,49 +462,94 @@ void World::HandleInteraction() {
             continue;
         }
 
+        if (!IsClose(player_.position, npc.position, 52.0f))
+        {
+            continue;
+        }
+        if (npc.isMerchant)
+        {
+            for (int i = 0; i < static_cast<int>(npcs_.size()); ++i)
+            {
+                if (&npcs_[i] == &npc)
+                {
+                    OpenShopUi(i);
+                    message_ = npc.name + ": What would you like to buy?";
+                    return;
+                }
+            }
+        }
         if (npc.name == "Elder Rowan")
         {
             if (questSystem_.CanAcceptQuest("main_001"))
             {
                 questSystem_.AcceptQuest("main_001");
+                questSystem_.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
                 message_ = npc.name + ": Please clear out 3 slimes near the village.";
                 return;
             }
-
-            questSystem_.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
-
+            if (questSystem_.IsQuestActive("main_001"))
+            {
+                questSystem_.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
+            }
+            if (questSystem_.IsAwaitingChoice("main_001"))
+            {
+                OpenChoiceUi("main_001");
+                message_ = npc.name + ": Choose your next path.";
+                return;
+            }
             int rewardGold = 0;
             int rewardXp = 0;
             int rewardItemCount = 0;
             std::string rewardItemId;
-
             if (questSystem_.RewardQuest("main_001", rewardGold, rewardXp, rewardItemId, rewardItemCount))
             {
                 player_.gold += rewardGold;
                 player_.xp += rewardXp;
-
                 if (rewardItemId == "bronze_blade")
                 {
                     player_.weapon = Weapon{"Bronze Blade", 4, 48.0f, 0.28f};
                 }
-
-                message_ = npc.name + ": Thank you. Take this reward.";
+                message_ = npc.name + ": You have earned your reward.";
                 return;
             }
-
-            message_ = npc.name + ": The road is safer than it used to be.";
+            if (questSystem_.CanAcceptQuest("main_002") && questSystem_.HasFlag("path_crossroads"))
+            {
+                questSystem_.AcceptQuest("main_002");
+                questSystem_.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
+                message_ = npc.name + ": Head to the crossroads and find the Wanderer.";
+                return;
+            }
+            if (questSystem_.CanAcceptQuest("side_001") && questSystem_.HasFlag("path_healer"))
+            {
+                questSystem_.AcceptQuest("side_001");
+                questSystem_.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
+                message_ = npc.name + ": Gather 3 herbs for the healer.";
+                return;
+            }
+            if (questSystem_.IsQuestActive("side_001"))
+            {
+                questSystem_.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
+                if (questSystem_.RewardQuest("side_001", rewardGold, rewardXp, rewardItemId, rewardItemCount))
+                {
+                    player_.gold += rewardGold;
+                    player_.xp += rewardXp;
+                    message_ = npc.name + ": Thank you for helping the healer.";
+                    return;
+                }
+            }
+            message_ = npc.name + " (" + npc.regionName + "): " + npc.idleText;
             return;
         }
-
         if (npc.name == "Wanderer")
         {
-            questSystem_.NotifyEvent({QuestEventType::NpcTalkedTo, "wanderer", 1});
-
+            if (questSystem_.IsQuestActive("main_002"))
+            {
+                questSystem_.NotifyEvent({QuestEventType::NpcTalkedTo, "wanderer", 1});
+            }
             int rewardGold = 0;
             int rewardXp = 0;
             int rewardItemCount = 0;
             std::string rewardItemId;
-
             if (questSystem_.RewardQuest("main_002", rewardGold, rewardXp, rewardItemId, rewardItemCount))
             {
                 player_.gold += rewardGold;
@@ -444,8 +557,7 @@ void World::HandleInteraction() {
                 message_ = npc.name + ": Welcome to the crossroads.";
                 return;
             }
-
-            message_ = npc.name + ": You've entered another travel region.";
+            message_ = npc.name + " (" + npc.regionName + "): " + npc.idleText;
             return;
         }
     }
@@ -454,6 +566,10 @@ void World::HandleInteraction() {
         if (!drop.taken && IsClose(player_.position, drop.position, 40.0f)) {
             drop.taken = true;
             TryPickup(drop.itemName, drop.amount);
+            if (drop.itemName == "Herb")
+            {
+                questSystem_.NotifyEvent({QuestEventType::ItemCollected, "herb", drop.amount});
+            }
             message_ = "Picked up " + drop.itemName + " x" + std::to_string(drop.amount) + ".";
             return;
         }
@@ -523,6 +639,7 @@ void World::DrawMap() const {
 
             char tile = map_[y][x];
             const bool isWall = tile == '#';
+            const bool isDoor = (tile == 'B' || tile == 'D');
 
             if (!tilesetLoaded_) {
                 DrawRectangleRec(destination, isWall ? DARKGRAY : Color{30, 80, 35, 255});
@@ -531,13 +648,22 @@ void World::DrawMap() const {
             }
 
             Rectangle source{};
-            if (isWall) {
+            if (isWall)
+            {
                 bool isTopEdge = (y == 0 || map_[y - 1][x] != '#');
-                const std::vector<Rectangle>& palette = isTopEdge ? tiles_.wallTop : tiles_.wallFace;
+                const std::vector<Rectangle> &palette = isTopEdge ? tiles_.wallTop : tiles_.wallFace;
                 source = palette[TileVariantIndex(x, y, static_cast<int>(palette.size()))];
-            } else if (tile == 'p') {
+            }
+            else if (isDoor)
+            {
+                source = tiles_.path[0];
+            }
+            else if (tile == 'p')
+            {
                 source = tiles_.path[TileVariantIndex(x, y, static_cast<int>(tiles_.path.size()))];
-            } else {
+            }
+            else
+            {
                 source = tiles_.grass[TileVariantIndex(x, y, static_cast<int>(tiles_.grass.size()))];
             }
 
@@ -593,13 +719,26 @@ void World::DrawHud() const {
         {
             quest << "Quest: " << def->title;
 
-            if (!def->objectives.empty() && !state->objectives.empty())
+            if (state->status == QuestStatus::AwaitingChoice)
             {
-                quest << " ["
-                      << state->objectives[0].currentCount
-                      << "/"
-                      << def->objectives[0].requiredCount
-                      << "]";
+                quest << " - Choose [1] or [2]";
+            }
+            else if (state->currentStageIndex >= 0 &&
+                     state->currentStageIndex < static_cast<int>(def->stages.size()))
+            {
+                const auto &stageDef = def->stages[state->currentStageIndex];
+                const auto &stageState = state->stages[state->currentStageIndex];
+
+                quest << " - " << stageDef.description;
+
+                if (!stageDef.objectives.empty() && !stageState.objectives.empty())
+                {
+                    quest << " ["
+                          << stageState.objectives[0].currentCount
+                          << "/"
+                          << stageDef.objectives[0].requiredCount
+                          << "]";
+                }
             }
         }
     }
@@ -623,6 +762,123 @@ void World::DrawHud() const {
     DrawText(message_.c_str(), 16, screenHeight_ - 32, 18, LIGHTGRAY);
 }
 
+void World::OpenChoiceUi(const std::string &questId)
+{
+    const QuestDefinition *def = questSystem_.GetDefinition(questId);
+    if (!def || def->branchChoices.empty())
+        return;
+
+    choiceUi_.visible = true;
+    choiceUi_.questId = questId;
+    choiceUi_.choiceIds.clear();
+    choiceUi_.choiceTexts.clear();
+    choiceUi_.selectedIndex = 0;
+
+    for (const auto &choice : def->branchChoices)
+    {
+        choiceUi_.choiceIds.push_back(choice.id);
+        choiceUi_.choiceTexts.push_back(choice.text);
+    }
+}
+
+void World::CloseChoiceUi()
+{
+    choiceUi_.visible = false;
+    choiceUi_.questId.clear();
+    choiceUi_.choiceIds.clear();
+    choiceUi_.choiceTexts.clear();
+    choiceUi_.selectedIndex = 0;
+}
+
+void World::UpdateChoiceUi()
+{
+    if (!choiceUi_.visible)
+        return;
+
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
+        CloseChoiceUi();
+        message_ = "Choice cancelled.";
+        return;
+    }
+
+    if (IsKeyPressed(KEY_UP))
+    {
+        if (!choiceUi_.choiceTexts.empty())
+        {
+            choiceUi_.selectedIndex--;
+            if (choiceUi_.selectedIndex < 0)
+                choiceUi_.selectedIndex = static_cast<int>(choiceUi_.choiceTexts.size()) - 1;
+        }
+    }
+
+    if (IsKeyPressed(KEY_DOWN))
+    {
+        if (!choiceUi_.choiceTexts.empty())
+        {
+            choiceUi_.selectedIndex++;
+            if (choiceUi_.selectedIndex >= static_cast<int>(choiceUi_.choiceTexts.size()))
+                choiceUi_.selectedIndex = 0;
+        }
+    }
+
+    if (IsKeyPressed(KEY_ENTER))
+    {
+        if (choiceUi_.selectedIndex >= 0 &&
+            choiceUi_.selectedIndex < static_cast<int>(choiceUi_.choiceIds.size()))
+        {
+            const std::string chosenId = choiceUi_.choiceIds[choiceUi_.selectedIndex];
+
+            if (questSystem_.ChooseBranch(choiceUi_.questId, chosenId))
+            {
+                const std::string chosenText = choiceUi_.choiceTexts[choiceUi_.selectedIndex];
+                message_ = "Choice made: " + chosenText;
+            }
+            else
+            {
+                message_ = "Could not apply choice.";
+            }
+
+            CloseChoiceUi();
+        }
+    }
+}
+
+void World::DrawChoiceUi() const
+{
+    if (!choiceUi_.visible)
+        return;
+
+    DrawRectangle(0, 0, screenWidth_, screenHeight_, Fade(BLACK, 0.55f));
+
+    const int boxW = 620;
+    const int boxH = 240;
+    const int boxX = (screenWidth_ - boxW) / 2;
+    const int boxY = (screenHeight_ - boxH) / 2;
+
+    DrawRectangle(boxX, boxY, boxW, boxH, Fade(BLACK, 0.90f));
+    DrawRectangleLines(boxX, boxY, boxW, boxH, WHITE);
+
+    DrawText("Choose Your Path", boxX + 20, boxY + 18, 28, YELLOW);
+    DrawText("Use Up/Down to select, Enter to confirm, Esc to cancel",
+             boxX + 20, boxY + 52, 18, LIGHTGRAY);
+
+    int y = boxY + 95;
+    for (int i = 0; i < static_cast<int>(choiceUi_.choiceTexts.size()); ++i)
+    {
+        const bool selected = (i == choiceUi_.selectedIndex);
+
+        if (selected)
+        {
+            DrawRectangle(boxX + 16, y - 4, boxW - 32, 30, Fade(SKYBLUE, 0.25f));
+            DrawRectangleLines(boxX + 16, y - 4, boxW - 32, 30, SKYBLUE);
+        }
+
+        std::string line = std::to_string(i + 1) + ". " + choiceUi_.choiceTexts[i];
+        DrawText(line.c_str(), boxX + 28, y, 22, selected ? WHITE : LIGHTGRAY);
+        y += 38;
+    }
+}
 
 // Draw a compact minimap in the top-right corner.
 void World::DrawMinimap() const {
@@ -937,4 +1193,153 @@ int World::TileVariantIndex(int x, int y, int count) const {
         seed = -seed;
     }
     return seed % count;
+}
+
+void World::OpenShopUi(int merchantIndex)
+{
+    shopUi_.visible = true;
+    shopUi_.selectedIndex = 0;
+    shopUi_.merchantIndex = merchantIndex;
+}
+
+void World::CloseShopUi()
+{
+    shopUi_.visible = false;
+    shopUi_.selectedIndex = 0;
+    shopUi_.merchantIndex = -1;
+}
+
+void World::HandleBuildingTransitions()
+{
+    Rectangle playerRect{
+        player_.position.x,
+        player_.position.y,
+        player_.size.x,
+        player_.size.y};
+
+    for (const auto &door : buildingDoors_)
+    {
+        if (CheckCollisionRecs(playerRect, door.trigger) && IsKeyPressed(KEY_E))
+        {
+            player_.position = door.insideSpawn;
+            message_ = "You entered the building.";
+            return;
+        }
+    }
+
+    for (const auto &exitDoor : exitDoors_)
+    {
+        if (CheckCollisionRecs(playerRect, exitDoor.trigger) && IsKeyPressed(KEY_E))
+        {
+            player_.position = exitDoor.outsideSpawn;
+            message_ = "You left the building.";
+            return;
+        }
+    }
+}
+
+void World::UpdateShopUi()
+{
+    if (!shopUi_.visible)
+        return;
+
+    if (IsKeyPressed(KEY_ESCAPE))
+    {
+        CloseShopUi();
+        message_ = "Closed shop.";
+        return;
+    }
+
+    if (shopUi_.merchantIndex < 0 || shopUi_.merchantIndex >= static_cast<int>(npcs_.size()))
+    {
+        CloseShopUi();
+        return;
+    }
+
+    const auto &stock = npcs_[shopUi_.merchantIndex].shopStock;
+    if (stock.empty())
+        return;
+
+    if (IsKeyPressed(KEY_UP))
+    {
+        shopUi_.selectedIndex--;
+        if (shopUi_.selectedIndex < 0)
+            shopUi_.selectedIndex = static_cast<int>(stock.size()) - 1;
+    }
+
+    if (IsKeyPressed(KEY_DOWN))
+    {
+        shopUi_.selectedIndex++;
+        if (shopUi_.selectedIndex >= static_cast<int>(stock.size()))
+            shopUi_.selectedIndex = 0;
+    }
+
+    if (IsKeyPressed(KEY_ENTER))
+    {
+        const ShopItem &item = stock[shopUi_.selectedIndex];
+
+        if (player_.gold < item.price)
+        {
+            message_ = "Not enough gold for " + item.name + ".";
+            return;
+        }
+
+        player_.gold -= item.price;
+
+        if (item.name == "Iron Sword")
+        {
+            player_.weapon = Weapon{"Iron Sword", 6, 52.0f, 0.25f};
+            message_ = "Bought Iron Sword.";
+        }
+        else
+        {
+            TryPickup(item.name, item.amount);
+            message_ = "Bought " + item.name + " x" + std::to_string(item.amount) + ".";
+        }
+    }
+}
+
+void World::DrawShopUi() const
+{
+    if (!shopUi_.visible)
+        return;
+
+    if (shopUi_.merchantIndex < 0 || shopUi_.merchantIndex >= static_cast<int>(npcs_.size()))
+        return;
+
+    const Npc &merchant = npcs_[shopUi_.merchantIndex];
+
+    DrawRectangle(0, 0, screenWidth_, screenHeight_, Fade(BLACK, 0.55f));
+
+    const int boxW = 520;
+    const int boxH = 300;
+    const int boxX = (screenWidth_ - boxW) / 2;
+    const int boxY = (screenHeight_ - boxH) / 2;
+
+    DrawRectangle(boxX, boxY, boxW, boxH, Fade(BLACK, 0.92f));
+    DrawRectangleLines(boxX, boxY, boxW, boxH, WHITE);
+
+    DrawText(merchant.name.c_str(), boxX + 20, boxY + 18, 28, YELLOW);
+    DrawText("Use Up/Down to select, Enter to buy, Esc to close",
+             boxX + 20, boxY + 52, 18, LIGHTGRAY);
+
+    int y = boxY + 95;
+    for (int i = 0; i < static_cast<int>(merchant.shopStock.size()); ++i)
+    {
+        const bool selected = (i == shopUi_.selectedIndex);
+        const ShopItem &item = merchant.shopStock[i];
+
+        if (selected)
+        {
+            DrawRectangle(boxX + 16, y - 4, boxW - 32, 30, Fade(SKYBLUE, 0.25f));
+            DrawRectangleLines(boxX + 16, y - 4, boxW - 32, 30, SKYBLUE);
+        }
+
+        std::string line = item.name + "  -  " + std::to_string(item.price) + " gold";
+        DrawText(line.c_str(), boxX + 28, y, 22, selected ? WHITE : LIGHTGRAY);
+        y += 38;
+    }
+
+    std::string goldLine = "Your Gold: " + std::to_string(player_.gold);
+    DrawText(goldLine.c_str(), boxX + 20, boxY + boxH - 36, 22, GOLD);
 }
