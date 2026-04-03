@@ -1,1 +1,0 @@
-C:\dev\MMORPG_boilerplate\2D_TOPDOWN_MMORPG_BOILERPLATE\mmorpg_boilerplate_v2.2.0\build\_deps\raylib-build\raylib\external\glfw\src\glfw.dir\Release\glfw.lib
