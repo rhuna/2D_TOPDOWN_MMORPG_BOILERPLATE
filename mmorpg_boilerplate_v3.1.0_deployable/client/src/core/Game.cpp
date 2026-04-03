@@ -1,13 +1,16 @@
 #include "core/Game.h"
 #include "world/World.h"
-#include "net/NetworkClient.h"
 #include <memory>
 #include <raylib.h>
 #include <fstream>
 #include <string>
+#include <cctype>
 
+Game::Game() = default;
+Game::~Game() = default;
 namespace
 {
+    
     struct ClientConfig
     {
         std::string host = "127.0.0.1";
@@ -50,7 +53,6 @@ namespace
                 }
                 catch (...)
                 {
-                    // Keep default port if parsing fails.
                 }
             }
         }
@@ -78,14 +80,58 @@ void Game::Run()
 
         world_->Update(dt);
 
-        if (IsKeyPressed(KEY_F))
-        {
-            networkClient_.SendAttack();
-        }
-
+        // Toggle chat mode with Enter.
         if (IsKeyPressed(KEY_ENTER))
         {
-            networkClient_.SendChat("Hello world!");
+            if (!chatActive_)
+            {
+                chatActive_ = true;
+            }
+            else
+            {
+                if (!chatInput_.empty())
+                {
+                    networkClient_.SendChat(chatInput_);
+                    chatInput_.clear();
+                }
+                chatActive_ = false;
+            }
+        }
+
+        // Cancel chat input.
+        if (chatActive_ && IsKeyPressed(KEY_ESCAPE))
+        {
+            chatInput_.clear();
+            chatActive_ = false;
+        }
+
+        // Backspace deletes one character.
+        if (chatActive_ && IsKeyPressed(KEY_BACKSPACE) && !chatInput_.empty())
+        {
+            chatInput_.pop_back();
+        }
+
+        // Collect typed characters while chat is active.
+        if (chatActive_)
+        {
+            int key = GetCharPressed();
+            while (key > 0)
+            {
+                // Printable ASCII range.
+                if (key >= 32 && key <= 126 && chatInput_.size() < 80)
+                {
+                    chatInput_.push_back(static_cast<char>(key));
+                }
+                key = GetCharPressed();
+            }
+        }
+        else
+        {
+            // Gameplay inputs only when not typing.
+            if (IsKeyPressed(KEY_F))
+            {
+                networkClient_.SendAttack();
+            }
         }
 
         Vector2 playerPos = world_->GetPlayerPosition();
@@ -107,12 +153,42 @@ void Game::Run()
         ClearBackground(BLACK);
         world_->Draw();
 
+        // Chat history.
         auto chat = networkClient_.GetChatMessages();
         int y = 20;
         for (const auto &msg : chat)
         {
             DrawText(msg.c_str(), 20, y, 18, WHITE);
             y += 22;
+        }
+
+        // Chat input box.
+        if (chatActive_)
+        {
+            const int boxX = 16;
+            const int boxY = screenHeight - 165;
+            const int boxW = screenWidth - 32;
+            const int boxH = 34;
+
+            DrawRectangle(boxX, boxY, boxW, boxH, Fade(BLACK, 0.80f));
+            DrawRectangleLines(boxX, boxY, boxW, boxH, SKYBLUE);
+
+            std::string prompt = "Chat: " + chatInput_ + "_";
+            DrawText(prompt.c_str(), boxX + 10, boxY + 8, 20, WHITE);
+
+            DrawText("Enter = send, Esc = cancel",
+                     boxX,
+                     boxY - 22,
+                     18,
+                     LIGHTGRAY);
+        }
+        else
+        {
+            DrawText("Press Enter to chat",
+                     16,
+                     screenHeight - 165,
+                     18,
+                     LIGHTGRAY);
         }
 
         EndDrawing();
