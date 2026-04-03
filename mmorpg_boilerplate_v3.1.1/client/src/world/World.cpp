@@ -1,8 +1,7 @@
 #include "world/World.h"
 #include "world/Data.h"
 #include "net/NetworkClient.h"
-#include "../include/world/QuestSystem.h"
-#include "../include/world/QuestState.h"
+#include "game/QuestSystem.h"
 #include <algorithm>
 #include <cmath>
 #include <sstream>
@@ -27,12 +26,7 @@ World::World() {
     map_ = BuildMap();
     LoadAssets();
 
-    // Set up the first quest in the system. In a real game, you'd load this from data files.
-    slimeQuest_.title = "Slime Cleanup";
-    // In this prototype, the quest system is not fully implemented, so we just use this struct to track progress for the one quest we have.
-    slimeQuest_.description = "Defeat 3 slimes for the village elder.";
-    // The quest system will check this field when enemies are killed to track progress and completion.
-    slimeQuest_.killsNeeded = 3;
+    questSystem_.LoadFromJson("data/quests.json");
     // The quest system will also check this field to prevent over-tracking kills after the quest is complete.
     camera_.offset = Vector2{screenWidth_ * 0.5f, screenHeight_ * 0.5f};
     // Start with a zoomed-out view so players can see the world and their position in it right away.
@@ -378,10 +372,12 @@ void World::HandleCombat(float) {
                 drops_.push_back(Drop{enemy.position, "Herb", 1, false});
                 message_ = "You defeated a " + enemy.name + " and found an Herb.";
 
+                questSystem_.NotifyEvent({QuestEventType::EnemyKilled, "slime", 1});
 
-                questSystem_.NotifyEvent({QuestEventType::EnemyKilled,
-                                          "slime",
-                                          1});
+                if (questSystem_.IsQuestCompleted("main_001"))
+                {
+                    message_ = "Quest complete. Return to Elder Rowan.";
+                }
             }
         }
     }
@@ -398,22 +394,60 @@ void World::HandleInteraction() {
             continue;
         }
 
-        if (!slimeQuest_.accepted) {
-            slimeQuest_.accepted = true;
-            message_ = npc.name + ": " + npc.questText;
+        if (npc.name == "Elder Rowan")
+        {
+            if (questSystem_.CanAcceptQuest("main_001"))
+            {
+                questSystem_.AcceptQuest("main_001");
+                message_ = npc.name + ": Please clear out 3 slimes near the village.";
+                return;
+            }
+
+            questSystem_.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
+
+            int rewardGold = 0;
+            int rewardXp = 0;
+            int rewardItemCount = 0;
+            std::string rewardItemId;
+
+            if (questSystem_.RewardQuest("main_001", rewardGold, rewardXp, rewardItemId, rewardItemCount))
+            {
+                player_.gold += rewardGold;
+                player_.xp += rewardXp;
+
+                if (rewardItemId == "bronze_blade")
+                {
+                    player_.weapon = Weapon{"Bronze Blade", 4, 48.0f, 0.28f};
+                }
+
+                message_ = npc.name + ": Thank you. Take this reward.";
+                return;
+            }
+
+            message_ = npc.name + ": The road is safer than it used to be.";
             return;
         }
 
-        if (slimeQuest_.completed && !slimeQuest_.rewarded) {
-            slimeQuest_.rewarded = true;
-            player_.gold += 25;
-            player_.weapon = Weapon{"Bronze Blade", 4, 48.0f, 0.28f};
-            message_ = npc.name + ": Thank you. Take this Bronze Blade and 25 gold.";
+        if (npc.name == "Wanderer")
+        {
+            questSystem_.NotifyEvent({QuestEventType::NpcTalkedTo, "wanderer", 1});
+
+            int rewardGold = 0;
+            int rewardXp = 0;
+            int rewardItemCount = 0;
+            std::string rewardItemId;
+
+            if (questSystem_.RewardQuest("main_002", rewardGold, rewardXp, rewardItemId, rewardItemCount))
+            {
+                player_.gold += rewardGold;
+                player_.xp += rewardXp;
+                message_ = npc.name + ": Welcome to the crossroads.";
+                return;
+            }
+
+            message_ = npc.name + ": You've entered another travel region.";
             return;
         }
-
-        message_ = npc.name + " (" + npc.regionName + "): " + npc.idleText;
-        return;
     }
 
     for (auto& drop : drops_) {
@@ -548,20 +582,33 @@ void World::DrawHud() const {
     DrawText(stats.str().c_str(), 48, screenHeight_ - 116, 20, WHITE);
 
     std::ostringstream quest;
-    quest << "Quest: " << slimeQuest_.title << " ["
-          << slimeQuest_.killsDone << "/" << slimeQuest_.killsNeeded << "]";
-    if (!slimeQuest_.accepted) {
-        quest.str("");
-        quest.clear();
-        quest << "Quest: Talk to Elder Rowan to get your first quest.";
-    }
-    if (slimeQuest_.rewarded) {
-        quest.str("");
-        quest.clear();
-        quest << "Quest: Completed.";
-    }
-    DrawText(quest.str().c_str(), 16, screenHeight_ - 88, 20, YELLOW);
+    auto activeQuests = questSystem_.GetActiveQuests();
 
+    if (!activeQuests.empty())
+    {
+        const QuestState *state = activeQuests.front();
+        const QuestDefinition *def = questSystem_.GetDefinition(state->questId);
+
+        if (def)
+        {
+            quest << "Quest: " << def->title;
+
+            if (!def->objectives.empty() && !state->objectives.empty())
+            {
+                quest << " ["
+                      << state->objectives[0].currentCount
+                      << "/"
+                      << def->objectives[0].requiredCount
+                      << "]";
+            }
+        }
+    }
+    else
+    {
+        quest << "Quest: No active quests.";
+    }
+
+    DrawText(quest.str().c_str(), 16, screenHeight_ - 88, 20, YELLOW);
     std::ostringstream inventory;
     inventory << "Inventory: ";
     for (std::size_t i = 0; i < player_.inventory.size(); ++i) {
@@ -831,7 +878,7 @@ bool World::IsClose(Vector2 a, Vector2 b, float distance) const {
 }
 
 // Convert atlas grid coordinates into a source rectangle.
-World::Cell(int col, int row) const {
+Rectangle World::Cell(int col, int row) const {
     return Rectangle{
         static_cast<float>(col * atlasCellSize_),
         static_cast<float>(row * atlasCellSize_),

@@ -21,11 +21,13 @@ add_executable(TopDownMMOClient
     src/net/NetworkClient.cpp
     src/world/World.cpp
     src/world/Data.cpp
+    src/game/QuestSystem.cpp
 )
 
 target_include_directories(TopDownMMOClient PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/shared
+    ${CMAKE_SOURCE_DIR}/third_party
     ${CMAKE_SOURCE_DIR}/third_party/asio/include
 )
 

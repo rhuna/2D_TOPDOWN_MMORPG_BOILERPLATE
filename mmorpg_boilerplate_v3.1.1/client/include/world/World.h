@@ -2,9 +2,7 @@
 #include "net/NetworkClient.h"
 #include "core/Types.h"
 #include "raylib.h"
-#include "QuestSystem.h"
-#include "QuestState.h"
-#include "Quest.h"
+#include "game/QuestSystem.h"
 #include <vector>
 #include <array>
 #include <string>
@@ -93,7 +91,6 @@ private:
     std::vector<Drop> drops_;
     std::vector<RemoteActor> remotePlayers_;
     QuestSystem questSystem_;
-    Quest slimeQuest_;
     std::string message_;
     float playerAttackTimer_ = 0.0f;
     Texture2D tileset_{};
