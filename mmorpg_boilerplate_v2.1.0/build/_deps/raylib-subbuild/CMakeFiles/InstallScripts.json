@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"C:/dev/MMORPG_boilerplate/2D_TOPDOWN_MMORPG_BOILERPLATE/mmorpg_boilerplate_v2.1.0/build/_deps/raylib-subbuild/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
