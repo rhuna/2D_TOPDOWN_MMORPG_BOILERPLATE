@@ -51,6 +51,24 @@ struct ShopUiState
     int merchantIndex = -1; // index into npcs_
 };
 
+struct InventoryUiState
+{
+    bool visible = false;
+    int selectedIndex = 0;
+    int columns = 4;
+};
+
+struct EquipmentUiState
+{
+    bool visible = false;
+};
+
+struct QuestLogUiState
+{
+    bool visible = false;
+    int selectedIndex = 0;
+};
+
 struct RemoteSnapshot;
 
 class World {
@@ -62,6 +80,9 @@ public:
     void UpdateRemotePlayers(const std::unordered_map<int, RemotePlayer> &snapshots, int localId, float dt);
     Vector2 GetPlayerPosition() const;
     Vector2 GetWorldPixelSize() const;
+    // Lets Game ask whether a modal / blocking world UI is open.
+    // This is needed so Enter won't also open chat while a menu is active.
+    bool IsBlockingUiOpen() const;
 
 private:
     void LoadAssets();
@@ -91,6 +112,7 @@ private:
     const AnimationClip& SelectClip(const DirectionalSprite& spriteSet, Direction facing, bool walking) const;
     const AtlasFrame& ResolveFrame(const AnimationClip& clip, float animClock) const;
     int TileVariantIndex(int x, int y, int count) const;
+    // UI methods:
     void UpdateChoiceUi();
     void DrawChoiceUi() const;
     void OpenChoiceUi(const std::string &questId);
@@ -100,6 +122,18 @@ private:
     void DrawShopUi() const;
     void OpenShopUi(int merchantIndex);
     void CloseShopUi();
+
+    // Inventory and equipment management:
+    void UpdateInventoryUi();
+    void DrawInventoryUi() const;
+
+    void UpdateEquipmentUi();
+    void DrawEquipmentUi() const;
+
+    void UpdateQuestLogUi();
+    void DrawQuestLogUi() const;
+    // Returns to the main world view, closing any open UI.
+    void CloseAllOverlayUi();
 
 private:
     std::vector<std::string> map_;
@@ -124,8 +158,12 @@ private:
     DirectionalSprite playerAtlas_;
     DirectionalSprite npcAtlas_;
     DirectionalSprite slimeAtlas_;
+    // UI states:
     ChoiceUiState choiceUi_;
     std::vector<BuildingDoor> buildingDoors_;
     std::vector<ExitDoor> exitDoors_;
     ShopUiState shopUi_;
+    InventoryUiState inventoryUi_;
+    EquipmentUiState equipmentUi_;
+    QuestLogUiState questLogUi_;
 };

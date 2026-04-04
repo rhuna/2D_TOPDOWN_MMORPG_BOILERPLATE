@@ -69,6 +69,8 @@ void Game::Run()
     InitWindow(screenWidth, screenHeight, "TopDownMMOStarter - Networked Sprite Build");
     SetTargetFPS(60);
 
+    SetExitKey(KEY_NULL);
+
     world_ = std::make_unique<World>();
 
     const ClientConfig config = LoadClientConfig("client_config.txt");
@@ -80,8 +82,12 @@ void Game::Run()
 
         world_->Update(dt);
 
-        // Toggle chat mode with Enter.
-        if (IsKeyPressed(KEY_ENTER))
+        // If the world has a blocking UI open (shop, inventory, quest log,
+        // equipment, branching-choice dialog), do not let Enter also toggle chat.
+        const bool blockingWorldUi = world_->IsBlockingUiOpen();
+
+        // Toggle chat mode with Enter only when no blocking world UI is open.
+        if (!blockingWorldUi && IsKeyPressed(KEY_ENTER))
         {
             if (!chatActive_)
             {
@@ -127,8 +133,8 @@ void Game::Run()
         }
         else
         {
-            // Gameplay inputs only when not typing.
-            if (IsKeyPressed(KEY_F))
+            // Gameplay inputs only when not typing and not inside a blocking UI.
+            if (!blockingWorldUi && IsKeyPressed(KEY_F))
             {
                 networkClient_.SendAttack();
             }

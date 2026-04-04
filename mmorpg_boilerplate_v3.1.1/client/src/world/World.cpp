@@ -19,6 +19,171 @@ Vector2 NormalizeOrZero(Vector2 value) {
 bool HasMovement(const Actor& actor) {
     return std::fabs(actor.moveIntent.x) > 0.01f || std::fabs(actor.moveIntent.y) > 0.01f;
 }
+
+const char *ItemCategoryLabel(ItemCategory category)
+{
+    switch (category)
+    {
+    case ItemCategory::Consumable:
+        return "Consumable";
+    case ItemCategory::Weapon:
+        return "Weapon";
+    case ItemCategory::Armor:
+        return "Armor";
+    case ItemCategory::Material:
+        return "Material";
+    case ItemCategory::Quest:
+        return "Quest";
+    default:
+        return "Unknown";
+    }
+}
+
+Color ItemCategoryColor(ItemCategory category)
+{
+    switch (category)
+    {
+    case ItemCategory::Consumable:
+        return GREEN;
+    case ItemCategory::Weapon:
+        return ORANGE;
+    case ItemCategory::Armor:
+        return SKYBLUE;
+    case ItemCategory::Material:
+        return YELLOW;
+    case ItemCategory::Quest:
+        return PINK;
+    default:
+        return LIGHTGRAY;
+    }
+}
+
+Weapon MakeWeaponForItemName(const std::string &name)
+{
+    if (name == "Bronze Blade")
+        return Weapon{"Bronze Blade", 4, 48.0f, 0.28f};
+
+    if (name == "Iron Sword")
+        return Weapon{"Iron Sword", 6, 52.0f, 0.25f};
+
+    return Weapon{"Rusty Sword", 2, 42.0f, 0.35f};
+}
+
+Armor MakeArmorForItemName(const std::string &name)
+{
+    if (name == "Leather Armor")
+        return Armor{"Leather Armor", 3};
+
+    if (name == "Chain Vest")
+        return Armor{"Chain Vest", 5};
+
+    return Armor{"Traveler Clothes", 0};
+}
+
+InventoryItem MakeInventoryItemByName(const std::string &itemName, int amount)
+{
+    if (itemName == "Potion")
+    {
+        return InventoryItem{
+            "Potion",
+            amount,
+            ItemCategory::Consumable,
+            "Restores a strong amount of health.",
+            0,
+            0,
+            10,
+            10,
+            false,
+            true};
+    }
+
+    if (itemName == "Herb")
+    {
+        return InventoryItem{
+            "Herb",
+            amount,
+            ItemCategory::Consumable,
+            "Restores a little health.",
+            0,
+            0,
+            4,
+            4,
+            false,
+            true};
+    }
+
+    if (itemName == "Iron Sword")
+    {
+        return InventoryItem{
+            "Iron Sword",
+            amount,
+            ItemCategory::Weapon,
+            "A stronger sword sold by merchants.",
+            6,
+            0,
+            0,
+            30,
+            true,
+            false};
+    }
+
+    if (itemName == "Bronze Blade")
+    {
+        return InventoryItem{
+            "Bronze Blade",
+            amount,
+            ItemCategory::Weapon,
+            "A quest reward weapon.",
+            4,
+            0,
+            0,
+            0,
+            true,
+            false};
+    }
+
+    if (itemName == "Leather Armor")
+    {
+        return InventoryItem{
+            "Leather Armor",
+            amount,
+            ItemCategory::Armor,
+            "Light armor that adds defense.",
+            0,
+            3,
+            0,
+            24,
+            true,
+            false};
+    }
+
+    if (itemName == "Chain Vest")
+    {
+        return InventoryItem{
+            "Chain Vest",
+            amount,
+            ItemCategory::Armor,
+            "Heavier armor with better protection.",
+            0,
+            5,
+            0,
+            40,
+            true,
+            false};
+    }
+
+    return InventoryItem{
+        itemName,
+        amount,
+        ItemCategory::Material,
+        "A generic crafting material.",
+        0,
+        0,
+        0,
+        1,
+        false,
+        true};
+}
 }
 
 // Construct the world, load the map, set up the atlas, and spawn all actors.
@@ -88,9 +253,10 @@ World::World() {
                     npc.regionName = "Village Shop";
                     npc.isMerchant = true;
                     npc.shopStock = {
-                        {"Potion", 10, 1},
-                        {"Herb", 4, 1},
-                        {"Iron Sword", 30, 1}};
+                        {"Potion", 10, 1, ItemCategory::Consumable, "Restores a strong amount of health.", 0, 0, 10},
+                        {"Herb", 4, 1, ItemCategory::Consumable, "Restores a little health.", 0, 0, 4},
+                        {"Iron Sword", 30, 1, ItemCategory::Weapon, "A stronger sword than your starter blade.", 6, 0, 0},
+                        {"Leather Armor", 24, 1, ItemCategory::Armor, "Light armor for new adventurers.", 0, 3, 0}};
                 }
                 else
                 {
@@ -134,6 +300,14 @@ World::~World() {
     }
 }
 
+bool World::IsBlockingUiOpen() const
+{
+    return choiceUi_.visible ||
+           shopUi_.visible ||
+           inventoryUi_.visible ||
+           equipmentUi_.visible ||
+           questLogUi_.visible;
+}
 
 // Update client-side remote-player visuals from the latest network snapshots.
 //
@@ -263,20 +437,91 @@ void World::SetupAtlas() {
 
 // Per-frame update entry point.
 // Handles input toggles, zoom, combat cooldowns, actors, drops, and camera.
-void World::Update(float dt) {
+void World::Update(float dt)
+{
     screenWidth_ = GetScreenWidth();
     screenHeight_ = GetScreenHeight();
     camera_.offset = Vector2{screenWidth_ * 0.5f, screenHeight_ * 0.5f};
 
-    if (IsKeyPressed(KEY_TAB)) {
+    if (IsKeyPressed(KEY_TAB) && !IsBlockingUiOpen())
+    {
         showBigMap_ = !showBigMap_;
     }
 
     const float wheel = GetMouseWheelMove();
-    if (wheel != 0.0f && !showBigMap_) {
+    if (wheel != 0.0f && !showBigMap_ && !IsBlockingUiOpen())
+    {
         targetZoom_ = std::clamp(targetZoom_ + wheel * 0.20f, 1.0f, 3.5f);
     }
 
+    // -------------------------------------------------------------------------
+    // Global popup hotkeys.
+    // These keys toggle their own popup on/off.
+    // Only one overlay menu is shown at a time.
+    // -------------------------------------------------------------------------
+    if (!choiceUi_.visible && !shopUi_.visible)
+    {
+        if (IsKeyPressed(KEY_I))
+        {
+            const bool wasOpen = inventoryUi_.visible;
+            CloseAllOverlayUi();
+
+            if (!wasOpen)
+            {
+                inventoryUi_.visible = true;
+                inventoryUi_.selectedIndex = 0;
+                message_ = "Inventory opened.";
+            }
+            else
+            {
+                message_ = "Inventory closed.";
+            }
+
+            UpdateCamera(dt);
+            return;
+        }
+
+        if (IsKeyPressed(KEY_C))
+        {
+            const bool wasOpen = equipmentUi_.visible;
+            CloseAllOverlayUi();
+
+            if (!wasOpen)
+            {
+                equipmentUi_.visible = true;
+                message_ = "Equipment opened.";
+            }
+            else
+            {
+                message_ = "Equipment closed.";
+            }
+
+            UpdateCamera(dt);
+            return;
+        }
+
+        if (IsKeyPressed(KEY_Q))
+        {
+            const bool wasOpen = questLogUi_.visible;
+            CloseAllOverlayUi();
+
+            if (!wasOpen)
+            {
+                questLogUi_.visible = true;
+                questLogUi_.selectedIndex = 0;
+                message_ = "Quest log opened.";
+            }
+            else
+            {
+                message_ = "Quest log closed.";
+            }
+
+            UpdateCamera(dt);
+            return;
+        }
+    }
+
+    // Modal / blocking UIs take over the update loop.
     if (choiceUi_.visible)
     {
         UpdateChoiceUi();
@@ -291,6 +536,27 @@ void World::Update(float dt) {
         return;
     }
 
+    if (inventoryUi_.visible)
+    {
+        UpdateInventoryUi();
+        UpdateCamera(dt);
+        return;
+    }
+
+    if (equipmentUi_.visible)
+    {
+        UpdateEquipmentUi();
+        UpdateCamera(dt);
+        return;
+    }
+
+    if (questLogUi_.visible)
+    {
+        UpdateQuestLogUi();
+        UpdateCamera(dt);
+        return;
+    }
+
     playerAttackTimer_ -= dt;
     UpdatePlayer(dt);
     HandleBuildingTransitions();
@@ -300,46 +566,73 @@ void World::Update(float dt) {
     HandleDrops();
     UpdateCamera(dt);
 }
-
 // Draw the complete frame: world, actors, HUD, minimap, then optional world map.
-void World::Draw() const {
+void World::Draw() const
+{
     BeginMode2D(camera_);
     DrawMap();
 
-    for (const auto& npc : npcs_) {
+    for (const auto &npc : npcs_)
+    {
         DrawNpc(npc);
     }
 
-    for (const auto& enemy : enemies_) {
-        if (enemy.alive) {
+    for (const auto &enemy : enemies_)
+    {
+        if (enemy.alive)
+        {
             DrawEnemy(enemy);
         }
     }
 
-    for (const auto& drop : drops_) {
-        if (!drop.taken) {
+    for (const auto &drop : drops_)
+    {
+        if (!drop.taken)
+        {
             DrawPickupSprite(drop.position, tiles_.herb, WHITE);
         }
     }
 
     DrawPlayer();
+
     for (const auto &remote : remotePlayers_)
     {
         DrawRemotePlayer(remote);
     }
+
     EndMode2D();
+
     DrawHud();
     DrawMinimap();
-    if (showBigMap_) {
+
+    if (showBigMap_)
+    {
         DrawWorldMapOverlay();
     }
+
     if (choiceUi_.visible)
     {
         DrawChoiceUi();
     }
+
     if (shopUi_.visible)
     {
         DrawShopUi();
+    }
+
+    if (inventoryUi_.visible)
+    {
+        DrawInventoryUi();
+    }
+
+    if (equipmentUi_.visible)
+    {
+        DrawEquipmentUi();
+    }
+
+    if (questLogUi_.visible)
+    {
+        DrawQuestLogUi();
     }
 }
 
@@ -507,7 +800,9 @@ void World::HandleInteraction() {
                 player_.xp += rewardXp;
                 if (rewardItemId == "bronze_blade")
                 {
-                    player_.weapon = Weapon{"Bronze Blade", 4, 48.0f, 0.28f};
+                    // Add the reward item to inventory and equip it immediately.
+                    TryPickup("Bronze Blade", 1);
+                    player_.weapon = MakeWeaponForItemName("Bronze Blade");
                 }
                 message_ = npc.name + ": You have earned your reward.";
                 return;
@@ -690,11 +985,13 @@ void World::DrawMap() const {
 }
 
 // Draw bottom HUD bar with player stats, quest text, inventory, and status message.
-void World::DrawHud() const {
+void World::DrawHud() const
+{
     const int hudHeight = 128;
     DrawRectangle(0, screenHeight_ - hudHeight, screenWidth_, hudHeight, Fade(BLACK, 0.75f));
 
-    if (tilesetLoaded_) {
+    if (tilesetLoaded_)
+    {
         Rectangle swordDestination{16.0f, static_cast<float>(screenHeight_ - 118), 24.0f, 24.0f};
         DrawTexturePro(tileset_, tiles_.sword, swordDestination, Vector2{0.0f, 0.0f}, 0.0f, WHITE);
     }
@@ -704,7 +1001,9 @@ void World::DrawHud() const {
           << "   XP: " << player_.xp
           << "   Gold: " << player_.gold
           << "   Weapon: " << player_.weapon.name
-          << " (DMG " << player_.weapon.damage << ")";
+          << " (DMG " << player_.weapon.damage << ")"
+          << "   Armor: " << player_.armor.name
+          << " (DEF " << player_.armor.defense << ")";
     DrawText(stats.str().c_str(), 48, screenHeight_ - 116, 20, WHITE);
 
     std::ostringstream quest;
@@ -748,17 +1047,25 @@ void World::DrawHud() const {
     }
 
     DrawText(quest.str().c_str(), 16, screenHeight_ - 88, 20, YELLOW);
+
     std::ostringstream inventory;
     inventory << "Inventory: ";
-    for (std::size_t i = 0; i < player_.inventory.size(); ++i) {
+    for (std::size_t i = 0; i < player_.inventory.size(); ++i)
+    {
         inventory << player_.inventory[i].name << " x" << player_.inventory[i].count;
-        if (i + 1 < player_.inventory.size()) {
+        if (i + 1 < player_.inventory.size())
+        {
             inventory << ", ";
         }
     }
+
     DrawText(inventory.str().c_str(), 16, screenHeight_ - 60, 20, SKYBLUE);
-    const char* controls = showBigMap_ ? "TAB closes world map" : "Mouse wheel zooms, TAB opens world map";
-    DrawText(controls, screenWidth_ - 320, screenHeight_ - 32, 18, LIGHTGRAY);
+
+    const char *controls = showBigMap_
+                               ? "TAB closes map | I inventory | C equipment | Q quests"
+                               : "Mouse wheel zooms | TAB map | I inventory | C equipment | Q quests";
+
+    DrawText(controls, screenWidth_ - 470, screenHeight_ - 32, 18, LIGHTGRAY);
     DrawText(message_.c_str(), 16, screenHeight_ - 32, 18, LIGHTGRAY);
 }
 
@@ -1100,14 +1407,21 @@ void World::DrawPickupSprite(Vector2 position, Rectangle source, Color tint) con
 }
 
 // Add a picked-up item into the player's inventory, stacking when possible.
-void World::TryPickup(const std::string& itemName, int amount) {
-    for (auto& item : player_.inventory) {
-        if (item.name == itemName) {
+void World::TryPickup(const std::string &itemName, int amount)
+{
+    InventoryItem newItem = MakeInventoryItemByName(itemName, amount);
+
+    for (auto &item : player_.inventory)
+    {
+        // Stack only items that are allowed to stack.
+        if (item.name == newItem.name && item.stackable)
+        {
             item.count += amount;
             return;
         }
     }
-    player_.inventory.push_back(InventoryItem{itemName, amount});
+
+    player_.inventory.push_back(newItem);
 }
 
 // Test the four corners of an actor-sized box against wall tiles.
@@ -1286,16 +1600,10 @@ void World::UpdateShopUi()
 
         player_.gold -= item.price;
 
-        if (item.name == "Iron Sword")
-        {
-            player_.weapon = Weapon{"Iron Sword", 6, 52.0f, 0.25f};
-            message_ = "Bought Iron Sword.";
-        }
-        else
-        {
-            TryPickup(item.name, item.amount);
-            message_ = "Bought " + item.name + " x" + std::to_string(item.amount) + ".";
-        }
+        // Everything purchased goes into inventory first.
+        // The player then equips weapon/armor from the inventory UI.
+        TryPickup(item.name, item.amount);
+        message_ = "Bought " + item.name + " x" + std::to_string(item.amount) + ".";
     }
 }
 
@@ -1308,11 +1616,12 @@ void World::DrawShopUi() const
         return;
 
     const Npc &merchant = npcs_[shopUi_.merchantIndex];
+    const auto &stock = merchant.shopStock;
 
     DrawRectangle(0, 0, screenWidth_, screenHeight_, Fade(BLACK, 0.55f));
 
-    const int boxW = 520;
-    const int boxH = 300;
+    const int boxW = 760;
+    const int boxH = 360;
     const int boxX = (screenWidth_ - boxW) / 2;
     const int boxY = (screenHeight_ - boxH) / 2;
 
@@ -1324,15 +1633,15 @@ void World::DrawShopUi() const
              boxX + 20, boxY + 52, 18, LIGHTGRAY);
 
     int y = boxY + 95;
-    for (int i = 0; i < static_cast<int>(merchant.shopStock.size()); ++i)
+    for (int i = 0; i < static_cast<int>(stock.size()); ++i)
     {
         const bool selected = (i == shopUi_.selectedIndex);
-        const ShopItem &item = merchant.shopStock[i];
+        const ShopItem &item = stock[i];
 
         if (selected)
         {
-            DrawRectangle(boxX + 16, y - 4, boxW - 32, 30, Fade(SKYBLUE, 0.25f));
-            DrawRectangleLines(boxX + 16, y - 4, boxW - 32, 30, SKYBLUE);
+            DrawRectangle(boxX + 16, y - 4, 320, 30, Fade(SKYBLUE, 0.25f));
+            DrawRectangleLines(boxX + 16, y - 4, 320, 30, SKYBLUE);
         }
 
         std::string line = item.name + "  -  " + std::to_string(item.price) + " gold";
@@ -1340,6 +1649,352 @@ void World::DrawShopUi() const
         y += 38;
     }
 
+    if (!stock.empty())
+    {
+        const ShopItem &item = stock[shopUi_.selectedIndex];
+
+        const int detailX = boxX + 380;
+        const int detailY = boxY + 100;
+
+        DrawText(item.name.c_str(), detailX, detailY, 28, WHITE);
+        DrawText(ItemCategoryLabel(item.category), detailX, detailY + 40, 20, ItemCategoryColor(item.category));
+        DrawText(item.description.c_str(), detailX, detailY + 72, 18, LIGHTGRAY);
+
+        if (item.attackBonus > 0)
+        {
+            DrawText(TextFormat("Attack: +%d", item.attackBonus), detailX, detailY + 120, 20, ORANGE);
+        }
+
+        if (item.defenseBonus > 0)
+        {
+            DrawText(TextFormat("Defense: +%d", item.defenseBonus), detailX, detailY + 150, 20, SKYBLUE);
+        }
+
+        if (item.healAmount > 0)
+        {
+            DrawText(TextFormat("Healing: %d", item.healAmount), detailX, detailY + 180, 20, GREEN);
+        }
+    }
+
     std::string goldLine = "Your Gold: " + std::to_string(player_.gold);
     DrawText(goldLine.c_str(), boxX + 20, boxY + boxH - 36, 22, GOLD);
+}
+
+void World::UpdateInventoryUi()
+{
+    if (!inventoryUi_.visible)
+        return;
+
+    const int itemCount = static_cast<int>(player_.inventory.size());
+    if (itemCount <= 0)
+    {
+        inventoryUi_.selectedIndex = 0;
+        return;
+    }
+
+    if (IsKeyPressed(KEY_LEFT))
+    {
+        inventoryUi_.selectedIndex--;
+        if (inventoryUi_.selectedIndex < 0)
+            inventoryUi_.selectedIndex = itemCount - 1;
+    }
+
+    if (IsKeyPressed(KEY_RIGHT))
+    {
+        inventoryUi_.selectedIndex++;
+        if (inventoryUi_.selectedIndex >= itemCount)
+            inventoryUi_.selectedIndex = 0;
+    }
+
+    if (IsKeyPressed(KEY_UP))
+    {
+        inventoryUi_.selectedIndex -= inventoryUi_.columns;
+        while (inventoryUi_.selectedIndex < 0)
+            inventoryUi_.selectedIndex += itemCount;
+    }
+
+    if (IsKeyPressed(KEY_DOWN))
+    {
+        inventoryUi_.selectedIndex += inventoryUi_.columns;
+        while (inventoryUi_.selectedIndex >= itemCount)
+            inventoryUi_.selectedIndex -= itemCount;
+    }
+
+    if (IsKeyPressed(KEY_ENTER))
+    {
+        InventoryItem &item = player_.inventory[inventoryUi_.selectedIndex];
+
+        if (item.category == ItemCategory::Consumable && item.count > 0)
+        {
+            player_.hp = std::min(player_.maxHp, player_.hp + item.healAmount);
+            item.count--;
+
+            message_ = "Used " + item.name + ".";
+
+            if (item.count <= 0)
+            {
+                player_.inventory.erase(player_.inventory.begin() + inventoryUi_.selectedIndex);
+
+                if (player_.inventory.empty())
+                {
+                    inventoryUi_.selectedIndex = 0;
+                }
+                else
+                {
+                    inventoryUi_.selectedIndex = std::min(
+                        inventoryUi_.selectedIndex,
+                        static_cast<int>(player_.inventory.size()) - 1);
+                }
+            }
+            return;
+        }
+
+        if (item.category == ItemCategory::Weapon)
+        {
+            player_.weapon = MakeWeaponForItemName(item.name);
+            message_ = "Equipped " + item.name + ".";
+            return;
+        }
+
+        if (item.category == ItemCategory::Armor)
+        {
+            player_.armor = MakeArmorForItemName(item.name);
+            message_ = "Equipped " + item.name + ".";
+            return;
+        }
+    }
+}
+
+void World::DrawInventoryUi() const
+{
+    if (!inventoryUi_.visible)
+        return;
+
+    DrawRectangle(0, 0, screenWidth_, screenHeight_, Fade(BLACK, 0.55f));
+
+    const int boxW = 780;
+    const int boxH = 420;
+    const int boxX = (screenWidth_ - boxW) / 2;
+    const int boxY = (screenHeight_ - boxH) / 2;
+
+    DrawRectangle(boxX, boxY, boxW, boxH, Fade(BLACK, 0.92f));
+    DrawRectangleLines(boxX, boxY, boxW, boxH, WHITE);
+
+    DrawText("Inventory", boxX + 20, boxY + 18, 28, YELLOW);
+    DrawText("Arrow keys move, Enter uses/equips, I or Esc closes",
+             boxX + 20, boxY + 52, 18, LIGHTGRAY);
+
+    const int slotSize = 72;
+    const int slotPad = 12;
+    const int startX = boxX + 24;
+    const int startY = boxY + 96;
+    const int columns = inventoryUi_.columns;
+
+    for (int i = 0; i < static_cast<int>(player_.inventory.size()); ++i)
+    {
+        const int col = i % columns;
+        const int row = i / columns;
+
+        const int x = startX + col * (slotSize + slotPad);
+        const int y = startY + row * (slotSize + slotPad);
+
+        const bool selected = (i == inventoryUi_.selectedIndex);
+        const InventoryItem &item = player_.inventory[i];
+
+        DrawRectangle(x, y, slotSize, slotSize, Fade(DARKGRAY, 0.9f));
+        DrawRectangleLines(x, y, slotSize, slotSize, selected ? YELLOW : GRAY);
+
+        DrawText(item.name.c_str(), x + 6, y + 10, 12, WHITE);
+        DrawText(TextFormat("x%d", item.count), x + 6, y + 28, 12, LIGHTGRAY);
+        DrawText(ItemCategoryLabel(item.category), x + 6, y + 46, 10, ItemCategoryColor(item.category));
+    }
+
+    if (!player_.inventory.empty())
+    {
+        const InventoryItem &item = player_.inventory[inventoryUi_.selectedIndex];
+
+        const int detailX = boxX + 380;
+        const int detailY = boxY + 100;
+
+        DrawText(item.name.c_str(), detailX, detailY, 28, WHITE);
+        DrawText(ItemCategoryLabel(item.category), detailX, detailY + 42, 20, ItemCategoryColor(item.category));
+        DrawText(item.description.c_str(), detailX, detailY + 74, 18, LIGHTGRAY);
+
+        if (item.attackBonus > 0)
+            DrawText(TextFormat("Attack: +%d", item.attackBonus), detailX, detailY + 120, 20, ORANGE);
+
+        if (item.defenseBonus > 0)
+            DrawText(TextFormat("Defense: +%d", item.defenseBonus), detailX, detailY + 150, 20, SKYBLUE);
+
+        if (item.healAmount > 0)
+            DrawText(TextFormat("Healing: %d", item.healAmount), detailX, detailY + 180, 20, GREEN);
+
+        DrawText(TextFormat("Count: %d", item.count), detailX, detailY + 220, 20, WHITE);
+    }
+}
+
+void World::UpdateEquipmentUi()
+{
+    if (!equipmentUi_.visible)
+        return;
+
+    if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_C))
+    {
+        equipmentUi_.visible = false;
+        message_ = "Equipment closed.";
+    }
+}
+
+void World::UpdateQuestLogUi()
+{
+    if (!questLogUi_.visible)
+        return;
+
+    const auto activeQuests = questSystem_.GetActiveQuests();
+    const int count = static_cast<int>(activeQuests.size());
+
+    if (count <= 0)
+    {
+        questLogUi_.selectedIndex = 0;
+        return;
+    }
+
+    if (IsKeyPressed(KEY_UP))
+    {
+        questLogUi_.selectedIndex--;
+        if (questLogUi_.selectedIndex < 0)
+            questLogUi_.selectedIndex = count - 1;
+    }
+
+    if (IsKeyPressed(KEY_DOWN))
+    {
+        questLogUi_.selectedIndex++;
+        if (questLogUi_.selectedIndex >= count)
+            questLogUi_.selectedIndex = 0;
+    }
+}
+
+void World::DrawEquipmentUi() const
+{
+    if (!equipmentUi_.visible)
+        return;
+
+    DrawRectangle(0, 0, screenWidth_, screenHeight_, Fade(BLACK, 0.55f));
+
+    const int boxW = 520;
+    const int boxH = 260;
+    const int boxX = (screenWidth_ - boxW) / 2;
+    const int boxY = (screenHeight_ - boxH) / 2;
+
+    DrawRectangle(boxX, boxY, boxW, boxH, Fade(BLACK, 0.92f));
+    DrawRectangleLines(boxX, boxY, boxW, boxH, WHITE);
+
+    DrawText("Equipment", boxX + 20, boxY + 18, 28, YELLOW);
+    DrawText("E closes", boxX + 20, boxY + 52, 18, LIGHTGRAY);
+
+    DrawText("Weapon:", boxX + 30, boxY + 100, 24, ORANGE);
+    DrawText(player_.weapon.name.c_str(), boxX + 170, boxY + 100, 24, WHITE);
+    DrawText(TextFormat("Damage: %d", player_.weapon.damage), boxX + 170, boxY + 130, 20, LIGHTGRAY);
+
+    DrawText("Armor:", boxX + 30, boxY + 175, 24, SKYBLUE);
+    DrawText(player_.armor.name.c_str(), boxX + 170, boxY + 175, 24, WHITE);
+    DrawText(TextFormat("Defense: %d", player_.armor.defense), boxX + 170, boxY + 205, 20, LIGHTGRAY);
+}
+
+void World::DrawQuestLogUi() const
+{
+    if (!questLogUi_.visible)
+        return;
+
+    DrawRectangle(0, 0, screenWidth_, screenHeight_, Fade(BLACK, 0.55f));
+
+    const int boxW = 760;
+    const int boxH = 380;
+    const int boxX = (screenWidth_ - boxW) / 2;
+    const int boxY = (screenHeight_ - boxH) / 2;
+
+    DrawRectangle(boxX, boxY, boxW, boxH, Fade(BLACK, 0.92f));
+    DrawRectangleLines(boxX, boxY, boxW, boxH, WHITE);
+
+    DrawText("Quest Log", boxX + 20, boxY + 18, 28, YELLOW);
+    DrawText("Use Up/Down to browse, Q or Esc closes",
+             boxX + 20, boxY + 52, 18, LIGHTGRAY);
+
+    const auto activeQuests = questSystem_.GetActiveQuests();
+
+    if (activeQuests.empty())
+    {
+        DrawText("No active quests.", boxX + 24, boxY + 110, 24, LIGHTGRAY);
+        return;
+    }
+
+    int listY = boxY + 100;
+    for (int i = 0; i < static_cast<int>(activeQuests.size()); ++i)
+    {
+        const QuestState *state = activeQuests[i];
+        const QuestDefinition *def = questSystem_.GetDefinition(state->questId);
+        if (!def)
+            continue;
+
+        const bool selected = (i == questLogUi_.selectedIndex);
+
+        if (selected)
+        {
+            DrawRectangle(boxX + 16, listY - 4, 280, 30, Fade(SKYBLUE, 0.25f));
+            DrawRectangleLines(boxX + 16, listY - 4, 280, 30, SKYBLUE);
+        }
+
+        DrawText(def->title.c_str(), boxX + 28, listY, 22, selected ? WHITE : LIGHTGRAY);
+        listY += 36;
+    }
+
+    const QuestState *state = activeQuests[questLogUi_.selectedIndex];
+    const QuestDefinition *def = questSystem_.GetDefinition(state->questId);
+
+    if (!def)
+        return;
+
+    const int detailX = boxX + 340;
+    const int detailY = boxY + 100;
+
+    DrawText(def->title.c_str(), detailX, detailY, 28, WHITE);
+
+    if (state->status == QuestStatus::AwaitingChoice)
+    {
+        DrawText("Status: Awaiting Choice", detailX, detailY + 42, 20, YELLOW);
+    }
+    else
+    {
+        DrawText("Status: Active", detailX, detailY + 42, 20, GREEN);
+    }
+
+    if (state->currentStageIndex >= 0 &&
+        state->currentStageIndex < static_cast<int>(def->stages.size()))
+    {
+        const auto &stageDef = def->stages[state->currentStageIndex];
+        const auto &stageState = state->stages[state->currentStageIndex];
+
+        DrawText(stageDef.description.c_str(), detailX, detailY + 82, 20, LIGHTGRAY);
+
+        if (!stageDef.objectives.empty() && !stageState.objectives.empty())
+        {
+            DrawText(
+                TextFormat("Progress: %d / %d",
+                           stageState.objectives[0].currentCount,
+                           stageDef.objectives[0].requiredCount),
+                detailX,
+                detailY + 130,
+                20,
+                SKYBLUE);
+        }
+    }
+}
+
+void World::CloseAllOverlayUi()
+{
+    inventoryUi_.visible = false;
+    equipmentUi_.visible = false;
+    questLogUi_.visible = false;
+    choiceUi_.visible = false;
+    shopUi_.visible = false;
 }
