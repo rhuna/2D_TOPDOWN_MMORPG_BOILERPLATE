@@ -19,29 +19,55 @@ std::vector<std::string> BuildMap() {
     // Start with fully walkable grass.
     std::vector<std::string> map(height, std::string(width, '.'));
 
+
+
+    //////////////////////////////////////////////////////////////////////  
+    // Helper lambdas for map construction.
+    //////////////////////////////////////////////////////////////////////
+
+    // Check if (x, y) is within the map bounds.
     auto inBounds = [&](int x, int y) {
+        // Note: the map is indexed as map[y][x] since it's a vector of strings.
+        // This is a common source of confusion, so be careful when working with (x, y) coordinates vs. map indexing.
+        // The map is accessed as map[row][column], which corresponds to map[y][x].
         return x >= 0 && x < width && y >= 0 && y < height;
     };
 
+    // Set a single tile at (x, y) to the given character if it's in bounds.
+    // This is a safe way to modify the map without risking out-of-bounds errors.
     auto setTile = [&](int x, int y, char tile) {
+        // Only modify the map if (x, y) is within bounds.
+        // This prevents out-of-bounds access and keeps the map construction robust.
         if (inBounds(x, y)) {
+            // Remember that map is indexed as map[y][x] since it's a vector of strings.
+            // This means that x corresponds to the column index and y corresponds to the row index.
             map[y][x] = tile;
         }
     };
 
+    //////////////////////////////////////////////////////////////////////
+    // Map construction logic using the helper lambdas.
+    //////////////////////////////////////////////////////////////////////
+
+    // Fill a rectangle area with a tile character.
     auto fillRect = [&](int x0, int y0, int w, int h, char tile) {
+        // Loop through the rectangle defined by (x0, y0) as the top-left corner and (w, h) as the width and height.
         for (int y = y0; y < y0 + h; ++y) {
+            // For each row in the rectangle, set the tiles from x0 to x0 + w to the specified tile character.
             for (int x = x0; x < x0 + w; ++x) {
+                // Use the setTile helper to safely modify the map.
                 setTile(x, y, tile);
             }
         }
     };
-
+    // Draw a rectangle frame with a tile character.
     auto frameRect = [&](int x0, int y0, int w, int h, char tile) {
+        // Draw the top and bottom edges of the rectangle.
         for (int x = x0; x < x0 + w; ++x) {
             setTile(x, y0, tile);
             setTile(x, y0 + h - 1, tile);
         }
+        // Draw the left and right edges of the rectangle.
         for (int y = y0; y < y0 + h; ++y) {
             setTile(x0, y, tile);
             setTile(x0 + w - 1, y, tile);
@@ -49,9 +75,13 @@ std::vector<std::string> BuildMap() {
     };
 
     // Carve a horizontal road.
+    // The thickness parameter allows us to create wider roads by carving multiple adjacent rows.
     auto carveH = [&](int x0, int x1, int y, int thickness = 1) {
+        // Ensure x0 is the leftmost coordinate and x1 is the rightmost coordinate for the loop.
         if (x0 > x1) std::swap(x0, x1);
+        // Loop through the specified thickness of rows to carve a wider road.
         for (int dy = 0; dy < thickness; ++dy) {
+            // For each row in the thickness, set the tiles from x0 to x1 to 'p' to represent a path.
             for (int x = x0; x <= x1; ++x) {
                 setTile(x, y + dy, 'p');
             }
@@ -60,8 +90,11 @@ std::vector<std::string> BuildMap() {
 
     // Carve a vertical road.
     auto carveV = [&](int x, int y0, int y1, int thickness = 1) {
+        // Ensure y0 is the topmost coordinate and y1 is the bottommost coordinate for the loop.
         if (y0 > y1) std::swap(y0, y1);
+        // Loop through the specified thickness of columns to carve a wider road.
         for (int dx = 0; dx < thickness; ++dx) {
+            // For each column in the thickness, set the tiles from y0 to y1 to 'p' to represent a path.
             for (int y = y0; y <= y1; ++y) {
                 setTile(x + dx, y, 'p');
             }
@@ -71,15 +104,19 @@ std::vector<std::string> BuildMap() {
     // Add a simple ellipse-shaped blocked area.
     // In this prototype, blocked areas are reused for lakes and heavy brush.
     auto addLake = [&](int cx, int cy, int radiusX, int radiusY) {
+        // Loop through a bounding box around the center of the ellipse.
         for (int y = cy - radiusY; y <= cy + radiusY; ++y) {
+            // For each row in the bounding box, loop through the columns to check if they fall within the ellipse.
             for (int x = cx - radiusX; x <= cx + radiusX; ++x) {
+                // Check if the current (x, y) coordinate is within the bounds of the map before accessing it.
                 if (!inBounds(x, y)) {
                     continue;
                 }
-
+                // Use the standard ellipse formula to determine if the (x, y) coordinate is inside the ellipse defined by (cx, cy) as the center and (radiusX, radiusY) as the radii.
                 const float nx = static_cast<float>(x - cx) / static_cast<float>(radiusX);
                 const float ny = static_cast<float>(y - cy) / static_cast<float>(radiusY);
 
+                // If the point is within the ellipse, set the tile to '#' to represent a blocked area.
                 if (nx * nx + ny * ny <= 1.0f) {
                     setTile(x, y, '#');
                 }
@@ -89,12 +126,15 @@ std::vector<std::string> BuildMap() {
 
     // Scatter blocked forest tiles with a repeating pattern.
     auto addForestBlock = [&](int x0, int y0, int w, int h, int stride) {
+        // Loop through the specified rectangle area and set tiles to '#' based on a pseudo-random pattern that depends on the coordinates.
         for (int y = y0; y < y0 + h; ++y) {
+            // For each row in the rectangle, loop through the columns and use a deterministic pattern to decide where to place blocked tiles.
             for (int x = x0; x < x0 + w; ++x) {
+                // Check if the current (x, y) coordinate is within the bounds of the map before accessing it.
                 if (!inBounds(x, y)) {
                     continue;
                 }
-
+                // Use a stable pseudo-random pattern based on the coordinates to create a natural-looking distribution of blocked tiles without needing to store additional state.
                 if (((x + y) % stride) == 0 || ((x * 3 + y * 5) % (stride + 2)) == 1) {
                     setTile(x, y, '#');
                 }
@@ -231,13 +271,43 @@ std::vector<std::string> BuildMap() {
         setTile(x, y, 'N');
     }
     // Restore shop building + interior markers
+    // Note: the shop building is placed after the road carving 
+    //to ensure that the building and its door are not 
+    //accidentally overwritten by the road carving logic.
     fillRect(32, 18, 8, 6, '#');
+    // The interior floor area of the building shell is filled 
+    //with '.' to represent walkable space inside the building. 
+    //This is done after the road carving to ensure that the 
+    //interior of the building is not overwritten by any roads 
+    //that might intersect with it.
     fillRect(33, 19, 6, 4, '.');
+    // The front door tile is set to 'B' to mark the entrance 
+    //to the building. This is done after the road carving to 
+    //ensure that the door tile is not overwritten by any 
+    //roads that might intersect with it.
     setTile(35, 23, 'B');
 
+    // The hidden interior room for the shop is created after the
+    // main map features to ensure that it is not overwritten by any
+    // of the earlier map construction steps. This interior is a
+    // separate area that the player is teleported to when entering the shop, so it needs
+    // to be defined on the same map but in a different location.
     fillRect(300, 20, 12, 10, '#');
+    // The interior floor area of the shop is filled with 
+    //'.' to represent walkable space inside the shop. 
+    //This is done after the walls are created to ensure 
+    //that the floor tiles are not overwritten by the wall tiles.
     fillRect(301, 21, 10, 8, '.');
+    // The exit door tile is set to 'D' to mark the location where
+    //the player will be teleported back to the overworld when exiting the shop.
+    //This is done after the floor is created to ensure that the
+    //door tile is not overwritten by the floor creation logic.
     setTile(306, 28, 'D');
+    // The merchant NPC is placed at 'M' inside the shop interior.
+    // This is done after the floor and walls are created to ensure
+    // that the NPC tile is not overwritten by those steps. 
+    //The NPC is placed in a location that is easily visible to 
+    //the player when they enter the shop.
     setTile(306, 24, 'M');
 
     return map;

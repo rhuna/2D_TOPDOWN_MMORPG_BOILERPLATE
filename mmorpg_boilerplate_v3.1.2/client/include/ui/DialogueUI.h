@@ -23,5 +23,3 @@ private:
     std::vector<std::string> dialogueLines_;
     int currentLineIndex_ = 0;
 };
-
-#endif // DIALOGUE_UI_H

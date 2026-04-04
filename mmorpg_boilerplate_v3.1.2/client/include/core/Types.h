@@ -108,6 +108,8 @@ struct Enemy : Actor
     float attackTimer = 0.0f;
 };
 
+// Remote player actors that the server tells us about.
+// These are used to show other players in the world, but we don't have full control over them.
 struct RemoteActor : Actor
 {
     int id{};
@@ -136,10 +138,11 @@ struct Npc : Actor
     std::string name;
     std::string idleText;
     std::string questText;
+    std::vector<std::string> dialogueLines;
     std::string regionName = "Roadside";
 
     bool isMerchant = false;
-    std::vector<ShopItem> shopStock;
+    std::vector<ShopItem> shopInventory;
 };
 
 // World item drop.
