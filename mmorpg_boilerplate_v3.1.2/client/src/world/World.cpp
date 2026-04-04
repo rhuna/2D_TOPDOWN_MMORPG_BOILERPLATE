@@ -7,183 +7,209 @@
 #include <sstream>
 #include "raylib.h" // for Vector2, Rectangle, Color, and drawing functions
 
+
+// Helper functions and data for the world construction and gameplay logic.
+//using namespace without a name to avoid polluting 
+//the global namespace with these internal details that 
+//are only relevant to this .cpp file.
 namespace {
-Vector2 NormalizeOrZero(Vector2 value) {
-    float length = std::sqrt(value.x * value.x + value.y * value.y);
-    if (length <= 0.0001f) {
-        return Vector2{0.0f, 0.0f};
+    // Normalize a Vector2, but return zero if the length is 
+    //very small to avoid division by zero.
+    Vector2 NormalizeOrZero(Vector2 value) {
+        // Calculate the length of the vector using the Pythagorean theorem.
+        float length = std::sqrt(value.x * value.x + value.y * value.y);
+        // If the length is very small, return a zero vector to avoid 
+        //division by zero.
+        if (length <= 0.0001f) {
+            return Vector2{0.0f, 0.0f};
+        }
+        // Otherwise, return the normalized vector by dividing each
+        //component by the length.
+        return Vector2{value.x / length, value.y / length};
     }
-    return Vector2{value.x / length, value.y / length};
-}
 
-bool HasMovement(const Actor& actor) {
-    return std::fabs(actor.moveIntent.x) > 0.01f || std::fabs(actor.moveIntent.y) > 0.01f;
-}
-
-const char *ItemCategoryLabel(ItemCategory category)
-{
-    switch (category)
-    {
-    case ItemCategory::Consumable:
-        return "Consumable";
-    case ItemCategory::Weapon:
-        return "Weapon";
-    case ItemCategory::Armor:
-        return "Armor";
-    case ItemCategory::Material:
-        return "Material";
-    case ItemCategory::Quest:
-        return "Quest";
-    default:
-        return "Unknown";
+    // Determine the facing direction from a movement vector. 
+    // This is used for both player input and remote player snapshots.
+    bool HasMovement(const Actor& actor) {
+        // Check if the absolute value of either the x or y component 
+        //of the moveIntent is greater than a small threshold (0.01f in this case).
+        return std::fabs(actor.moveIntent.x) > 0.01f || std::fabs(actor.moveIntent.y) > 0.01f;
     }
-}
 
-Color ItemCategoryColor(ItemCategory category)
-{
-    switch (category)
+    // Determine the facing direction from a movement vector.
+    const char *ItemCategoryLabel(ItemCategory category)
     {
-    case ItemCategory::Consumable:
-        return GREEN;
-    case ItemCategory::Weapon:
-        return ORANGE;
-    case ItemCategory::Armor:
-        return SKYBLUE;
-    case ItemCategory::Material:
-        return YELLOW;
-    case ItemCategory::Quest:
-        return PINK;
-    default:
-        return LIGHTGRAY;
+        // Return a string label for the given item category. 
+        //This is used in the UI to display the category of items.
+        switch (category)
+        {
+        case ItemCategory::Consumable:
+            return "Consumable";
+        case ItemCategory::Weapon:
+            return "Weapon";
+        case ItemCategory::Armor:
+            return "Armor";
+        case ItemCategory::Material:
+            return "Material";
+        case ItemCategory::Quest:
+            return "Quest";
+        default:
+            return "Unknown";
+        }
     }
-}
 
-Weapon MakeWeaponForItemName(const std::string &name)
-{
-    if (name == "Bronze Blade")
-        return Weapon{"Bronze Blade", 4, 48.0f, 0.28f};
-
-    if (name == "Iron Sword")
-        return Weapon{"Iron Sword", 6, 52.0f, 0.25f};
-
-    return Weapon{"Rusty Sword", 2, 42.0f, 0.35f};
-}
-
-Armor MakeArmorForItemName(const std::string &name)
-{
-    if (name == "Leather Armor")
-        return Armor{"Leather Armor", 3};
-
-    if (name == "Chain Vest")
-        return Armor{"Chain Vest", 5};
-
-    return Armor{"Traveler Clothes", 0};
-}
-
-InventoryItem MakeInventoryItemByName(const std::string &itemName, int amount)
-{
-    if (itemName == "Potion")
+    // Return a color associated with each item category. 
+    //This is used in the UI to color-code items based on their category.
+    Color ItemCategoryColor(ItemCategory category)
     {
+        // Return a Color struct based on the item category.
+        switch (category)
+        {
+        case ItemCategory::Consumable:
+            return GREEN;
+        case ItemCategory::Weapon:
+            return ORANGE;
+        case ItemCategory::Armor:
+            return SKYBLUE;
+        case ItemCategory::Material:
+            return YELLOW;
+        case ItemCategory::Quest:
+            return PINK;
+        default:
+            return LIGHTGRAY;
+        }
+    }
+
+    // Factory functions to create weapons, armor, and inventory items 
+    // based on their names.
+    Weapon MakeWeaponForItemName(const std::string &name)
+    {
+        if (name == "Bronze Blade")
+            return Weapon{"Bronze Blade", 4, 48.0f, 0.28f};
+
+        if (name == "Iron Sword")
+            return Weapon{"Iron Sword", 6, 52.0f, 0.25f};
+
+        return Weapon{"Rusty Sword", 2, 42.0f, 0.35f};
+    }
+
+    // Factory function to create armor based on its name.
+    Armor MakeArmorForItemName(const std::string &name)
+    {
+        if (name == "Leather Armor")
+            return Armor{"Leather Armor", 3};
+
+        if (name == "Chain Vest")
+            return Armor{"Chain Vest", 5};
+
+        return Armor{"Traveler Clothes", 0};
+    }
+    
+    // Factory function to create inventory items based on their name and amount.
+    InventoryItem MakeInventoryItemByName(const std::string &itemName, int amount)
+    {
+        if (itemName == "Potion")
+        {
+            return InventoryItem{
+                "Potion",
+                amount,
+                ItemCategory::Consumable,
+                "Restores a strong amount of health.",
+                0,
+                0,
+                10,
+                10,
+                false,
+                true};
+        }
+
+        if (itemName == "Herb")
+        {
+            return InventoryItem{
+                "Herb",
+                amount,
+                ItemCategory::Consumable,
+                "Restores a little health.",
+                0,
+                0,
+                4,
+                4,
+                false,
+                true};
+        }
+
+        if (itemName == "Iron Sword")
+        {
+            return InventoryItem{
+                "Iron Sword",
+                amount,
+                ItemCategory::Weapon,
+                "A stronger sword sold by merchants.",
+                6,
+                0,
+                0,
+                30,
+                true,
+                false};
+        }
+
+        if (itemName == "Bronze Blade")
+        {
+            return InventoryItem{
+                "Bronze Blade",
+                amount,
+                ItemCategory::Weapon,
+                "A quest reward weapon.",
+                4,
+                0,
+                0,
+                0,
+                true,
+                false};
+        }
+
+        if (itemName == "Leather Armor")
+        {
+            return InventoryItem{
+                "Leather Armor",
+                amount,
+                ItemCategory::Armor,
+                "Light armor that adds defense.",
+                0,
+                3,
+                0,
+                24,
+                true,
+                false};
+        }
+
+        if (itemName == "Chain Vest")
+        {
+            return InventoryItem{
+                "Chain Vest",
+                amount,
+                ItemCategory::Armor,
+                "Heavier armor with better protection.",
+                0,
+                5,
+                0,
+                40,
+                true,
+                false};
+        }
+
         return InventoryItem{
-            "Potion",
+            itemName,
             amount,
-            ItemCategory::Consumable,
-            "Restores a strong amount of health.",
+            ItemCategory::Material,
+            "A generic crafting material.",
             0,
             0,
-            10,
-            10,
+            0,
+            1,
             false,
             true};
     }
-
-    if (itemName == "Herb")
-    {
-        return InventoryItem{
-            "Herb",
-            amount,
-            ItemCategory::Consumable,
-            "Restores a little health.",
-            0,
-            0,
-            4,
-            4,
-            false,
-            true};
-    }
-
-    if (itemName == "Iron Sword")
-    {
-        return InventoryItem{
-            "Iron Sword",
-            amount,
-            ItemCategory::Weapon,
-            "A stronger sword sold by merchants.",
-            6,
-            0,
-            0,
-            30,
-            true,
-            false};
-    }
-
-    if (itemName == "Bronze Blade")
-    {
-        return InventoryItem{
-            "Bronze Blade",
-            amount,
-            ItemCategory::Weapon,
-            "A quest reward weapon.",
-            4,
-            0,
-            0,
-            0,
-            true,
-            false};
-    }
-
-    if (itemName == "Leather Armor")
-    {
-        return InventoryItem{
-            "Leather Armor",
-            amount,
-            ItemCategory::Armor,
-            "Light armor that adds defense.",
-            0,
-            3,
-            0,
-            24,
-            true,
-            false};
-    }
-
-    if (itemName == "Chain Vest")
-    {
-        return InventoryItem{
-            "Chain Vest",
-            amount,
-            ItemCategory::Armor,
-            "Heavier armor with better protection.",
-            0,
-            5,
-            0,
-            40,
-            true,
-            false};
-    }
-
-    return InventoryItem{
-        itemName,
-        amount,
-        ItemCategory::Material,
-        "A generic crafting material.",
-        0,
-        0,
-        0,
-        1,
-        false,
-        true};
-}
 }
 
 // Construct the world, load the map, set up the atlas, and spawn all actors.
