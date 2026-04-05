@@ -1,219 +1,66 @@
-#include "world/World.h" // for World class definition
-#include "world/Data.h" // for BuildMap()
-#include "net/NetworkClient.h" // for RemotePlayer
-#include "game/QuestSystem.h" //
+#include "world/World.h"
+
+#include "world/Data.h"
+
 #include <algorithm>
 #include <cmath>
-#include <sstream>
-#include "raylib.h" // for Vector2, Rectangle, Color, and drawing functions
 
-
-// Helper functions and data for the world construction and gameplay logic.
-//using namespace without a name to avoid polluting 
-//the global namespace with these internal details that 
-//are only relevant to this .cpp file.
-namespace {
-    // Normalize a Vector2, but return zero if the length is 
-    //very small to avoid division by zero.
-    Vector2 NormalizeOrZero(Vector2 value) {
-        // Calculate the length of the vector using the Pythagorean theorem.
-        float length = std::sqrt(value.x * value.x + value.y * value.y);
-        // If the length is very small, return a zero vector to avoid 
-        //division by zero.
-        if (length <= 0.0001f) {
-            return Vector2{0.0f, 0.0f};
-        }
-        // Otherwise, return the normalized vector by dividing each
-        //component by the length.
-        return Vector2{value.x / length, value.y / length};
-    }
-
-    // Determine the facing direction from a movement vector. 
-    // This is used for both player input and remote player snapshots.
-    bool HasMovement(const Actor& actor) {
-        // Check if the absolute value of either the x or y component 
-        //of the moveIntent is greater than a small threshold (0.01f in this case).
-        return std::fabs(actor.moveIntent.x) > 0.01f || std::fabs(actor.moveIntent.y) > 0.01f;
-    }
-
-    // Determine the facing direction from a movement vector.
-    const char *ItemCategoryLabel(ItemCategory category)
+namespace
+{
+Vector2 NormalizeOrZero(Vector2 value)
+{
+    const float length = std::sqrt(value.x * value.x + value.y * value.y);
+    if (length <= 0.0001f)
     {
-        // Return a string label for the given item category. 
-        //This is used in the UI to display the category of items.
-        switch (category)
-        {
-        case ItemCategory::Consumable:
-            return "Consumable";
-        case ItemCategory::Weapon:
-            return "Weapon";
-        case ItemCategory::Armor:
-            return "Armor";
-        case ItemCategory::Material:
-            return "Material";
-        case ItemCategory::Quest:
-            return "Quest";
-        default:
-            return "Unknown";
-        }
+        return Vector2{0.0f, 0.0f};
     }
-
-    // Return a color associated with each item category. 
-    //This is used in the UI to color-code items based on their category.
-    Color ItemCategoryColor(ItemCategory category)
-    {
-        // Return a Color struct based on the item category.
-        switch (category)
-        {
-        case ItemCategory::Consumable:
-            return GREEN;
-        case ItemCategory::Weapon:
-            return ORANGE;
-        case ItemCategory::Armor:
-            return SKYBLUE;
-        case ItemCategory::Material:
-            return YELLOW;
-        case ItemCategory::Quest:
-            return PINK;
-        default:
-            return LIGHTGRAY;
-        }
-    }
-
-    // Factory functions to create weapons, armor, and inventory items 
-    // based on their names.
-    Weapon MakeWeaponForItemName(const std::string &name)
-    {
-        if (name == "Bronze Blade")
-            return Weapon{"Bronze Blade", 4, 48.0f, 0.28f};
-
-        if (name == "Iron Sword")
-            return Weapon{"Iron Sword", 6, 52.0f, 0.25f};
-
-        return Weapon{"Rusty Sword", 2, 42.0f, 0.35f};
-    }
-
-    // Factory function to create armor based on its name.
-    Armor MakeArmorForItemName(const std::string &name)
-    {
-        if (name == "Leather Armor")
-            return Armor{"Leather Armor", 3};
-
-        if (name == "Chain Vest")
-            return Armor{"Chain Vest", 5};
-
-        return Armor{"Traveler Clothes", 0};
-    }
-    
-    // Factory function to create inventory items based on their name and amount.
-    InventoryItem MakeInventoryItemByName(const std::string &itemName, int amount)
-    {
-        if (itemName == "Potion")
-        {
-            return InventoryItem{
-                "Potion",
-                amount,
-                ItemCategory::Consumable,
-                "Restores a strong amount of health.",
-                0,
-                0,
-                10,
-                10,
-                false,
-                true};
-        }
-
-        if (itemName == "Herb")
-        {
-            return InventoryItem{
-                "Herb",
-                amount,
-                ItemCategory::Consumable,
-                "Restores a little health.",
-                0,
-                0,
-                4,
-                4,
-                false,
-                true};
-        }
-
-        if (itemName == "Iron Sword")
-        {
-            return InventoryItem{
-                "Iron Sword",
-                amount,
-                ItemCategory::Weapon,
-                "A stronger sword sold by merchants.",
-                6,
-                0,
-                0,
-                30,
-                true,
-                false};
-        }
-
-        if (itemName == "Bronze Blade")
-        {
-            return InventoryItem{
-                "Bronze Blade",
-                amount,
-                ItemCategory::Weapon,
-                "A quest reward weapon.",
-                4,
-                0,
-                0,
-                0,
-                true,
-                false};
-        }
-
-        if (itemName == "Leather Armor")
-        {
-            return InventoryItem{
-                "Leather Armor",
-                amount,
-                ItemCategory::Armor,
-                "Light armor that adds defense.",
-                0,
-                3,
-                0,
-                24,
-                true,
-                false};
-        }
-
-        if (itemName == "Chain Vest")
-        {
-            return InventoryItem{
-                "Chain Vest",
-                amount,
-                ItemCategory::Armor,
-                "Heavier armor with better protection.",
-                0,
-                5,
-                0,
-                40,
-                true,
-                false};
-        }
-
-        return InventoryItem{
-            itemName,
-            amount,
-            ItemCategory::Material,
-            "A generic crafting material.",
-            0,
-            0,
-            0,
-            1,
-            false,
-            true};
-    }
+    return Vector2{value.x / length, value.y / length};
 }
 
-// Construct the world, load the map, set up the atlas, and spawn all actors.
+Weapon MakeWeaponForItemName(const std::string& name)
+{
+    if (name == "Bronze Blade")
+    {
+        return Weapon{"Bronze Blade", 4, 48.0f, 0.28f};
+    }
+    if (name == "Iron Sword")
+    {
+        return Weapon{"Iron Sword", 6, 52.0f, 0.25f};
+    }
+    return Weapon{"Rusty Sword", 2, 42.0f, 0.35f};
+}
 
+InventoryItem MakeInventoryItemByName(const std::string& itemName, int amount)
+{
+    if (itemName == "Potion")
+    {
+        return InventoryItem{"Potion", amount, ItemCategory::Consumable, "Restores a strong amount of health.", 0, 0, 10, 10, false, true};
+    }
+    if (itemName == "Herb")
+    {
+        return InventoryItem{"Herb", amount, ItemCategory::Consumable, "Restores a little health.", 0, 0, 4, 4, false, true};
+    }
+    if (itemName == "Iron Sword")
+    {
+        return InventoryItem{"Iron Sword", amount, ItemCategory::Weapon, "A stronger sword sold by merchants.", 6, 0, 0, 30, true, false};
+    }
+    if (itemName == "Bronze Blade")
+    {
+        return InventoryItem{"Bronze Blade", amount, ItemCategory::Weapon, "A quest reward weapon.", 4, 0, 0, 0, true, false};
+    }
+    if (itemName == "Leather Armor")
+    {
+        return InventoryItem{"Leather Armor", amount, ItemCategory::Armor, "Light armor that adds defense.", 0, 3, 0, 24, true, false};
+    }
+    if (itemName == "Chain Vest")
+    {
+        return InventoryItem{"Chain Vest", amount, ItemCategory::Armor, "Heavier armor with better protection.", 0, 5, 0, 40, true, false};
+    }
+    return InventoryItem{itemName, amount, ItemCategory::Material, "A generic crafting material.", 0, 0, 0, 1, false, true};
+}
+} // namespace
+
+// Construct the world, load the map, set up the atlas, and spawn all actors.
 World::World() {
     map_ = BuildMap();
     LoadAssets();
@@ -320,9 +167,69 @@ World::World() {
         "starter_shop"});
 }
 
+// Release GPU texture memory when the world shuts down.
 World::~World() {
     if (tilesetLoaded_) {
         UnloadTexture(tileset_);
+    }
+}
+
+void World::UpdateRemotePlayers(const std::unordered_map<int, RemotePlayer> &snapshots, int localId, float dt)
+{
+    remotePlayers_.erase(
+        std::remove_if(remotePlayers_.begin(), remotePlayers_.end(),
+            [&](const RemoteActor& remote) {
+                return snapshots.find(remote.id) == snapshots.end() || remote.id == localId;
+            }),
+        remotePlayers_.end()
+    );
+
+    for (const auto& [id, snapshot] : snapshots) {
+        if (id == localId) {
+            continue;
+        }
+
+        auto it = std::find_if(remotePlayers_.begin(), remotePlayers_.end(),
+            [&](const RemoteActor& remote) {
+                return remote.id == id;
+            });
+
+        if (it == remotePlayers_.end()) {
+            RemoteActor remote;
+            remote.id = id;
+            remote.position = {snapshot.x, snapshot.y};
+            remote.targetPosition = {snapshot.x, snapshot.y};
+            remote.size = player_.size;
+            remote.facing = Direction::Down;
+            remote.color = Color{170, 210, 255, 255};
+            remote.hp = snapshot.hp;
+            remote.name = snapshot.name;
+            remotePlayers_.push_back(remote);
+            continue;
+        }
+
+        it->targetPosition = {snapshot.x, snapshot.y};
+        it->hp = snapshot.hp;
+        it->name = snapshot.name;
+
+        Vector2 toTarget{
+            it->targetPosition.x - it->position.x,
+            it->targetPosition.y - it->position.y
+        };
+
+        const float distance = std::sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y);
+        if (distance > 0.25f) {
+            it->moveIntent = NormalizeOrZero(toTarget);
+            it->facing = DirectionFromVector(it->moveIntent);
+            it->animClock += dt;
+
+            const float smoothing = std::min(1.0f, dt * 10.0f);
+            it->position.x += toTarget.x * smoothing;
+            it->position.y += toTarget.y * smoothing;
+        } else {
+            it->position = it->targetPosition;
+            it->moveIntent = {0.0f, 0.0f};
+        }
     }
 }
 
@@ -511,3 +418,4 @@ int World::TileVariantIndex(int x, int y, int count) const {
     }
     return seed % count;
 }
+

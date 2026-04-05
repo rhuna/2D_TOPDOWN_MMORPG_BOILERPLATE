@@ -20,9 +20,9 @@ add_executable(TopDownMMOClient
     src/core/Game.cpp
     src/net/NetworkClient.cpp
     src/world/World.cpp
-    src/world/World_Draw.cpp
+    src/world/World_Render.cpp
     src/world/World_Choice.cpp
-    src/world/World_Remote.cpp
+    src/world/World_Actors.cpp
     src/world/World_Combat.cpp
     src/world/World_Interaction.cpp
     src/world/WorldUI.cpp
