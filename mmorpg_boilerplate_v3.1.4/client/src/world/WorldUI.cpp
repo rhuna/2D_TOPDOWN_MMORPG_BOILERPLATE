@@ -1,4 +1,5 @@
 #include "world/World.h"
+#include "gameplay/ShopSystem.h"
 #include "raylib.h"
 
 // ==========================
@@ -90,11 +91,12 @@ void World::UpdateInventoryUi()
         inventoryUi_.MoveSelection(1, itemCount);
     }
 
-    if (IsKeyPressed(KEY_ENTER))
+    if (IsKeyPressed(KEY_ENTER) && itemCount > 0)
     {
-        if (itemCount > 0)
+        const int selectedIndex = inventoryUi_.SelectedIndex();
+        if (!inventorySystem_.UseSelectedItem(player_, selectedIndex, message_))
         {
-            message_ = "Use/drop inventory item logic goes here.";
+            inventorySystem_.EquipSelectedItem(player_, selectedIndex, message_);
         }
     }
 }
@@ -136,7 +138,8 @@ void World::DrawInventoryUi() const
         }
 
         const auto &item = player_.inventory[i];
-        DrawText(item.name.c_str(), boxX + 28, y, 22, selected ? WHITE : LIGHTGRAY);
+        const std::string line = item.name + " - " + std::to_string(item.price) + "g";
+        DrawText(line.c_str(), boxX + 28, y, 22, selected ? WHITE : LIGHTGRAY);
         y += 38;
     }
 }
@@ -203,7 +206,7 @@ void World::DrawEquipmentUi() const
         DrawRectangleLines(boxX + 16, boxY + 92, boxW - 32, 30, SKYBLUE);
     }
 
-    DrawText("Weapon: None", boxX + 28, boxY + 98, 22, weaponSelected ? WHITE : LIGHTGRAY);
+    DrawText((std::string("Weapon: ") + player_.weapon.name).c_str(), boxX + 28, boxY + 98, 22, weaponSelected ? WHITE : LIGHTGRAY);
 
     if (armorSelected)
     {
@@ -211,7 +214,7 @@ void World::DrawEquipmentUi() const
         DrawRectangleLines(boxX + 16, boxY + 130, boxW - 32, 30, SKYBLUE);
     }
 
-    DrawText("Armor: None", boxX + 28, boxY + 136, 22, armorSelected ? WHITE : LIGHTGRAY);
+    DrawText((std::string("Armor: ") + player_.armor.name).c_str(), boxX + 28, boxY + 136, 22, armorSelected ? WHITE : LIGHTGRAY);
 }
 
 // ==========================
@@ -285,7 +288,9 @@ void World::DrawQuestLogUi() const
 
         if (quest != nullptr)
         {
-            DrawText(quest->questId.c_str(), boxX + 28, y, 22, selected ? WHITE : LIGHTGRAY);
+            const QuestDefinition* definition = questSystem_.GetDefinition(quest->questId);
+            const std::string label = (definition != nullptr && !definition->title.empty()) ? definition->title : quest->questId;
+            DrawText(label.c_str(), boxX + 28, y, 22, selected ? WHITE : LIGHTGRAY);
         }
 
         y += 38;
@@ -358,15 +363,9 @@ void World::UpdateShopUi()
         shopUi_.MoveSelection(1, itemCount);
     }
 
-    if (IsKeyPressed(KEY_ENTER))
+    if (IsKeyPressed(KEY_ENTER) && itemCount > 0)
     {
-        if (itemCount <= 0)
-        {
-            return;
-        }
-
-        const ShopItem &item = merchant.shopInventory[shopUi_.SelectedIndex()];
-        message_ = "Bought " + item.name + ".";
+        shopSystem_.TryBuy(player_, merchant, shopUi_.SelectedIndex(), inventorySystem_, message_);
     }
 }
 
@@ -421,7 +420,8 @@ void World::DrawShopUi() const
             DrawRectangleLines(boxX + 16, y - 4, boxW - 32, 30, SKYBLUE);
         }
 
-        DrawText(item.name.c_str(), boxX + 28, y, 22, selected ? WHITE : LIGHTGRAY);
+        const std::string line = item.name + " - " + std::to_string(item.price) + "g";
+        DrawText(line.c_str(), boxX + 28, y, 22, selected ? WHITE : LIGHTGRAY);
         y += 38;
     }
 }

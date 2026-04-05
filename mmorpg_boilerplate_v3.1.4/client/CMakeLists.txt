@@ -29,6 +29,10 @@ add_executable(TopDownMMOClient
     src/world/World_Gameplay.cpp
     src/world/Data.cpp
     src/game/QuestSystem.cpp
+    src/gameplay/ItemFactory.cpp
+    src/gameplay/InventorySystem.cpp
+    src/gameplay/ShopSystem.cpp
+    src/gameplay/QuestRuntimeSystem.cpp
     src/ui/DialogueUI.cpp
 )
 

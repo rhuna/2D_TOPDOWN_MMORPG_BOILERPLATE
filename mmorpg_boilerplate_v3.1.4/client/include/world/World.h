@@ -2,6 +2,9 @@
 
 #include "core/Types.h"
 #include "game/QuestSystem.h"
+#include "gameplay/InventorySystem.h"
+#include "gameplay/QuestRuntimeSystem.h"
+#include "gameplay/ShopSystem.h"
 #include "net/NetworkClient.h"
 #include "raylib.h"
 #include "ui/DialogueUI.h"
@@ -146,6 +149,9 @@ private:
     std::vector<RemoteActor> remotePlayers_;
 
     QuestSystem questSystem_;
+    InventorySystem inventorySystem_;
+    ShopSystem shopSystem_;
+    QuestRuntimeSystem questRuntimeSystem_;
     std::string message_;
     float playerAttackTimer_ = 0.0f;
 
