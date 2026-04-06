@@ -3,6 +3,7 @@
 #include "core/Types.h"
 #include "raylib.h"
 #include "game/QuestSystem.h"
+#include "gameplay/GameServices.h"
 #include <vector>
 #include <array>
 #include <string>

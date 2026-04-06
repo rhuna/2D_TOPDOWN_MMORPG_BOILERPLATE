@@ -10,6 +10,7 @@
 #include "ui/QuestUI.h" // for QuestUI
 #include "ui/ShopUI.h"  // for ShopUI
 #include "ui/DialogueUI.h"  // for DialogueUI
+//#include "gameplay/GameServices.h" // for GameServices
 
 #include <vector>
 #include <array>
@@ -151,7 +152,6 @@ private:
     std::vector<Npc> npcs_;
     std::vector<Drop> drops_;
     std::vector<RemoteActor> remotePlayers_;
-    QuestSystem questSystem_;
     std::string message_;
     float playerAttackTimer_ = 0.0f;
     Texture2D tileset_{};
@@ -170,4 +170,7 @@ private:
     EquipmentUI equipmentUi_;
     QuestUI questLogUi_;
     ShopUI shopUi_;
+
+    QuestSystem questSystem_;
+    //gameplay::GameServices services_;
 };
