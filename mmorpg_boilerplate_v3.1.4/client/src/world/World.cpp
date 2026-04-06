@@ -1,58 +1,122 @@
 #include "world/World.h"
-
 #include "world/Data.h"
-#include "gameplay/ItemFactory.h"
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 
 namespace
 {
-Vector2 NormalizeOrZero(Vector2 value)
+InventoryItem MakeInventoryItemByName(const std::string &name, int amount)
 {
-    const float length = std::sqrt(value.x * value.x + value.y * value.y);
-    if (length <= 0.0001f)
-    {
-        return Vector2{0.0f, 0.0f};
-    }
-    return Vector2{value.x / length, value.y / length};
-}
+    InventoryItem item{};
+    item.name = name;
+    item.amount = amount;
 
+    if (name == "Potion")
+    {
+        item.price = 10;
+        item.category = ItemCategory::Consumable;
+        item.description = "Restores a strong amount of health.";
+        item.healAmount = 10;
+        item.stackable = true;
+        return item;
+    }
+
+    if (name == "Herb")
+    {
+        item.price = 4;
+        item.category = ItemCategory::Consumable;
+        item.description = "Restores a little health.";
+        item.healAmount = 4;
+        item.stackable = true;
+        return item;
+    }
+
+    if (name == "Iron Sword")
+    {
+        item.price = 30;
+        item.category = ItemCategory::Weapon;
+        item.description = "A stronger sword than your starter blade.";
+        item.attackBonus = 6;
+        item.stackable = false;
+        return item;
+    }
+
+    if (name == "Leather Armor")
+    {
+        item.price = 24;
+        item.category = ItemCategory::Armor;
+        item.description = "Light armor for new adventurers.";
+        item.defenseBonus = 3;
+        item.stackable = false;
+        return item;
+    }
+
+    if (name == "Health Potion Recipe")
+    {
+        item.price = 15;
+        item.category = ItemCategory::Quest;
+        item.description = "A recipe for a health potion. Maybe a local alchemist would be interested in this?";
+        item.stackable = false;
+        return item;
+    }
+
+    if (name == "Slime Goo")
+    {
+        item.price = 2;
+        item.category = ItemCategory::Material;
+        item.description = "A glob of slime goo. Could be useful for crafting.";
+        item.stackable = false;
+        return item;
+    }
+
+    if (name == "Magic Mushroom")
+    {
+        item.price = 3;
+        item.category = ItemCategory::Material;
+        item.description = "A mushroom with magical properties. Could be useful for crafting.";
+        item.stackable = false;
+        return item;
+    }
+
+    item.category = ItemCategory::Material;
+    item.description = "Unknown item.";
+    item.stackable = false;
+    return item;
+}
 } // namespace
 
-// Construct the world, load the map, set up the atlas, and spawn all actors.
-World::World() {
+World::World()
+{
     map_ = BuildMap();
     LoadAssets();
 
     questSystem_.LoadFromJson("data/quests.json");
-    // The quest system will also check this field to prevent over-tracking kills after the quest is complete.
+    services_.BindQuestSystem(questSystem_);
+
     camera_.offset = Vector2{screenWidth_ * 0.5f, screenHeight_ * 0.5f};
-    // Start with a zoomed-out view so players can see the world and their position in it right away.
     camera_.zoom = 2.0f;
-    // The target zoom is what the camera will smoothly interpolate towards, so we set it to the same value here.
     targetZoom_ = 2.0f;
-    // A message to display in the HUD. In a real game, you'd have a more robust system for showing tutorial messages and quest updates.
     message_ = "Huge world loaded. Mouse wheel zooms, TAB opens world map, WASD moves, E interacts, Space attacks.";
 
-    // Spawn actors based on map symbols. In a real game, you'd likely have separate spawn data and more complex logic for different regions.
-    for (int y = 0; y < static_cast<int>(map_.size()); ++y) {
-        // We add 2 pixels of padding here so actors aren't perfectly flush with the tile edges. This looks better, especially when zoomed in.
-        for (int x = 0; x < static_cast<int>(map_[y].size()); ++x) {
-            // Skip empty tiles and walls since they don't spawn actors.
+    for (int y = 0; y < static_cast<int>(map_.size()); ++y)
+    {
+        for (int x = 0; x < static_cast<int>(map_[y].size()); ++x)
+        {
             Vector2 worldPos{static_cast<float>(x * tileSize_ + 2), static_cast<float>(y * tileSize_ + 2)};
-            // The player is spawned on the map tile marked with 'P', slimes are marked with 'S', and NPCs are marked with 'E' or 'N' depending on their type.
-            if (map_[y][x] == 'P') {
-                // Set up the player with some starting stats. In a real game, you'd likely have a character creation process and load saved player data instead.
+
+            if (map_[y][x] == 'P')
+            {
                 player_.position = worldPos;
                 player_.color = WHITE;
                 player_.hp = 20;
                 player_.maxHp = 20;
                 player_.speed = 165.0f;
                 player_.facing = Direction::Down;
-                // The player starts with a basic weapon and some inventory items to demonstrate those systems, but in a real game you'd have item pickups and shops to acquire these instead.
-            } else if (map_[y][x] == 'S') {
-                // Set up a slime enemy. In a real game, you'd likely have different enemy types with different stats and behaviors, and you'd load these from data files instead of hardcoding them.
+            }
+            else if (map_[y][x] == 'S')
+            {
                 Enemy slime;
                 slime.position = worldPos;
                 slime.color = WHITE;
@@ -62,7 +126,6 @@ World::World() {
                 slime.speed = 65.0f;
                 slime.facing = Direction::Left;
                 enemies_.push_back(slime);
-                // The slime quest system will check this field when slimes are killed to track quest progress.
             }
             else if (map_[y][x] == 'E' || map_[y][x] == 'N' || map_[y][x] == 'M')
             {
@@ -90,7 +153,12 @@ World::World() {
                         {"Potion", 10, 1, ItemCategory::Consumable, "Restores a strong amount of health.", 0, 0, 10},
                         {"Herb", 4, 1, ItemCategory::Consumable, "Restores a little health.", 0, 0, 4},
                         {"Iron Sword", 30, 1, ItemCategory::Weapon, "A stronger sword than your starter blade.", 6, 0, 0},
-                        {"Leather Armor", 24, 1, ItemCategory::Armor, "Light armor for new adventurers.", 0, 3, 0}};
+                        {"Leather Armor", 24, 1, ItemCategory::Armor, "Light armor that adds defense.", 0, 3, 0},
+                        {"Chain Vest", 40, 1, ItemCategory::Armor, "Heavier armor with better protection.", 0, 5, 0},
+                        {"Bronze Blade", 0, 1, ItemCategory::Weapon, "A quest reward weapon. It's a bit better than your starter blade.", 4, 0, 0},
+                        {"Health Potion Recipe", 15, 1, ItemCategory::Quest, "A recipe for a health potion. Maybe a local alchemist would be interested in this?", 0, 0, 0},
+                        {"Slime Goo", 2, 1, ItemCategory::Material, "A glob of slime goo. Could be useful for crafting.", 0, 0, 0},
+                        {"Magic Mushroom", 3, 1, ItemCategory::Material, "A mushroom with magical properties. Could be useful for crafting.", 0, 0, 0}};
                 }
                 else
                 {
@@ -105,99 +173,35 @@ World::World() {
         }
     }
 
-    // Overworld building door -> shop interior
-    buildingDoors_.push_back(BuildingDoor{
-        Rectangle{
-            35.0f * tileSize_,
-            23.0f * tileSize_,
-            static_cast<float>(tileSize_),
-            static_cast<float>(tileSize_)},
-        Vector2{306.0f * tileSize_ + 2.0f, 27.0f * tileSize_ + 2.0f}, // inside spawn
-        Vector2{35.0f * tileSize_ + 2.0f, 24.0f * tileSize_ + 2.0f},  // outside spawn
-        "starter_shop"});
+    BuildingDoor door;
+    door.trigger = Rectangle{35.0f * tileSize_, 23.0f * tileSize_, static_cast<float>(tileSize_), static_cast<float>(tileSize_)};
+    door.insideSpawn = Vector2{306.0f * tileSize_ + 2.0f, 27.0f * tileSize_ + 2.0f};
+    door.outsideSpawn = Vector2{35.0f * tileSize_ + 2.0f, 24.0f * tileSize_ + 2.0f};
+    door.buildingId = "starter_shop";
+    buildingDoors_.push_back(door);
 
-    // Shop interior exit -> overworld
-    exitDoors_.push_back(ExitDoor{
-        Rectangle{
-            306.0f * tileSize_,
-            28.0f * tileSize_,
-            static_cast<float>(tileSize_),
-            static_cast<float>(tileSize_)},
-        Vector2{35.0f * tileSize_ + 2.0f, 24.0f * tileSize_ + 2.0f},
-        "starter_shop"});
+    ExitDoor exitDoor;
+    exitDoor.trigger = Rectangle{306.0f * tileSize_, 28.0f * tileSize_, static_cast<float>(tileSize_), static_cast<float>(tileSize_)};
+    exitDoor.outsideSpawn = Vector2{35.0f * tileSize_ + 2.0f, 24.0f * tileSize_ + 2.0f};
+    exitDoor.buildingId = "starter_shop";
+    exitDoors_.push_back(exitDoor);
 }
 
-// Release GPU texture memory when the world shuts down.
-World::~World() {
-    if (tilesetLoaded_) {
+World::~World()
+{
+    if (tilesetLoaded_)
+    {
         UnloadTexture(tileset_);
     }
 }
 
-void World::UpdateRemotePlayers(const std::unordered_map<int, RemotePlayer> &snapshots, int localId, float dt)
+void World::LoadAssets()
 {
-    remotePlayers_.erase(
-        std::remove_if(remotePlayers_.begin(), remotePlayers_.end(),
-            [&](const RemoteActor& remote) {
-                return snapshots.find(remote.id) == snapshots.end() || remote.id == localId;
-            }),
-        remotePlayers_.end()
-    );
-
-    for (const auto& [id, snapshot] : snapshots) {
-        if (id == localId) {
-            continue;
-        }
-
-        auto it = std::find_if(remotePlayers_.begin(), remotePlayers_.end(),
-            [&](const RemoteActor& remote) {
-                return remote.id == id;
-            });
-
-        if (it == remotePlayers_.end()) {
-            RemoteActor remote;
-            remote.id = id;
-            remote.position = {snapshot.x, snapshot.y};
-            remote.targetPosition = {snapshot.x, snapshot.y};
-            remote.size = player_.size;
-            remote.facing = Direction::Down;
-            remote.color = Color{170, 210, 255, 255};
-            remote.hp = snapshot.hp;
-            remote.name = snapshot.name;
-            remotePlayers_.push_back(remote);
-            continue;
-        }
-
-        it->targetPosition = {snapshot.x, snapshot.y};
-        it->hp = snapshot.hp;
-        it->name = snapshot.name;
-
-        Vector2 toTarget{
-            it->targetPosition.x - it->position.x,
-            it->targetPosition.y - it->position.y
-        };
-
-        const float distance = std::sqrt(toTarget.x * toTarget.x + toTarget.y * toTarget.y);
-        if (distance > 0.25f) {
-            it->moveIntent = NormalizeOrZero(toTarget);
-            it->facing = DirectionFromVector(it->moveIntent);
-            it->animClock += dt;
-
-            const float smoothing = std::min(1.0f, dt * 10.0f);
-            it->position.x += toTarget.x * smoothing;
-            it->position.y += toTarget.y * smoothing;
-        } else {
-            it->position = it->targetPosition;
-            it->moveIntent = {0.0f, 0.0f};
-        }
-    }
-}
-
-void World::LoadAssets() {
     tileset_ = LoadTexture("assets/tileset.png");
     tilesetLoaded_ = tileset_.id != 0;
 
-    if (!tilesetLoaded_) {
+    if (!tilesetLoaded_)
+    {
         message_ = "Could not load assets/tileset.png. Using fallback rectangles.";
         return;
     }
@@ -206,7 +210,8 @@ void World::LoadAssets() {
     SetupAtlas();
 }
 
-void World::SetupAtlas() {
+void World::SetupAtlas()
+{
     tiles_.grass = {Cell(0, 27), Cell(1, 27), Cell(2, 27), Cell(3, 27), Cell(4, 27)};
     tiles_.path = {Cell(0, 8), Cell(1, 8), Cell(2, 8), Cell(3, 8), Cell(4, 8)};
     tiles_.dirt = {Cell(0, 19), Cell(1, 19), Cell(2, 19), Cell(3, 19)};
@@ -215,85 +220,84 @@ void World::SetupAtlas() {
     tiles_.herb = Cell(16, 17);
     tiles_.sword = Cell(18, 17);
 
-    auto setClip = [&](DirectionalSprite& spriteSet, Direction direction, bool walking, std::initializer_list<AtlasFrame> frames, float frameDuration = 0.20f) {
+    auto setClip = [&](DirectionalSprite &spriteSet, Direction direction, bool walking, std::initializer_list<AtlasFrame> frames, float frameDuration = 0.18f)
+    {
         AnimationClip clip;
-        clip.frameDuration = frameDuration;
         clip.frames = frames;
-        if (walking) {
+        clip.frameDuration = frameDuration;
+        if (walking)
+        {
             spriteSet.walk[DirectionIndex(direction)] = clip;
-        } else {
+        }
+        else
+        {
             spriteSet.idle[DirectionIndex(direction)] = clip;
         }
     };
 
     setClip(playerAtlas_, Direction::Down, false, {{Cell(0, 108), false, 0.0f}});
-    setClip(playerAtlas_, Direction::Down, true,  {{Cell(0, 108), false, 0.0f}, {Cell(1, 108), false, -1.0f}}, 0.16f);
-    setClip(playerAtlas_, Direction::Up, false,   {{Cell(6, 108), false, 0.0f}});
-    setClip(playerAtlas_, Direction::Up, true,    {{Cell(6, 108), false, 0.0f}, {Cell(7, 108), false, -1.0f}}, 0.16f);
+    setClip(playerAtlas_, Direction::Down, true, {{Cell(0, 108), false, 0.0f}, {Cell(1, 108), false, -1.0f}}, 0.16f);
+    setClip(playerAtlas_, Direction::Up, false, {{Cell(6, 108), false, 0.0f}});
+    setClip(playerAtlas_, Direction::Up, true, {{Cell(6, 108), false, 0.0f}, {Cell(7, 108), false, -1.0f}}, 0.16f);
     setClip(playerAtlas_, Direction::Left, false, {{Cell(10, 108), false, 0.0f}});
-    setClip(playerAtlas_, Direction::Left, true,  {{Cell(10, 108), false, 0.0f}, {Cell(11, 108), false, -1.0f}}, 0.16f);
+    setClip(playerAtlas_, Direction::Left, true, {{Cell(10, 108), false, 0.0f}, {Cell(11, 108), false, -1.0f}}, 0.16f);
     setClip(playerAtlas_, Direction::Right, false, {{Cell(10, 108), true, 0.0f}});
-    setClip(playerAtlas_, Direction::Right, true,  {{Cell(10, 108), true, 0.0f}, {Cell(11, 108), true, -1.0f}}, 0.16f);
+    setClip(playerAtlas_, Direction::Right, true, {{Cell(10, 108), true, 0.0f}, {Cell(11, 108), true, -1.0f}}, 0.16f);
 
     setClip(npcAtlas_, Direction::Down, false, {{Cell(12, 108), false, 0.0f}});
-    setClip(npcAtlas_, Direction::Down, true,  {{Cell(12, 108), false, 0.0f}, {Cell(13, 108), false, -1.0f}}, 0.18f);
-    setClip(npcAtlas_, Direction::Up, false,   {{Cell(18, 108), false, 0.0f}});
-    setClip(npcAtlas_, Direction::Up, true,    {{Cell(18, 108), false, 0.0f}, {Cell(19, 108), false, -1.0f}}, 0.18f);
+    setClip(npcAtlas_, Direction::Down, true, {{Cell(12, 108), false, 0.0f}, {Cell(13, 108), false, -1.0f}}, 0.18f);
+    setClip(npcAtlas_, Direction::Up, false, {{Cell(18, 108), false, 0.0f}});
+    setClip(npcAtlas_, Direction::Up, true, {{Cell(18, 108), false, 0.0f}, {Cell(19, 108), false, -1.0f}}, 0.18f);
     setClip(npcAtlas_, Direction::Left, false, {{Cell(14, 108), false, 0.0f}});
-    setClip(npcAtlas_, Direction::Left, true,  {{Cell(14, 108), false, 0.0f}, {Cell(15, 108), false, -1.0f}}, 0.18f);
+    setClip(npcAtlas_, Direction::Left, true, {{Cell(14, 108), false, 0.0f}, {Cell(15, 108), false, -1.0f}}, 0.18f);
     setClip(npcAtlas_, Direction::Right, false, {{Cell(14, 108), true, 0.0f}});
-    setClip(npcAtlas_, Direction::Right, true,  {{Cell(14, 108), true, 0.0f}, {Cell(15, 108), true, -1.0f}}, 0.18f);
+    setClip(npcAtlas_, Direction::Right, true, {{Cell(14, 108), true, 0.0f}, {Cell(15, 108), true, -1.0f}}, 0.18f);
 
     setClip(slimeAtlas_, Direction::Down, false, {{Cell(7, 105), false, 0.0f}});
-    setClip(slimeAtlas_, Direction::Down, true,  {{Cell(7, 105), false, 0.0f}, {Cell(8, 105), false, -1.0f}, {Cell(9, 105), false, 0.0f}}, 0.12f);
-    setClip(slimeAtlas_, Direction::Up, false,   {{Cell(7, 105), false, 0.0f}});
-    setClip(slimeAtlas_, Direction::Up, true,    {{Cell(7, 105), false, 0.0f}, {Cell(8, 105), false, -1.0f}, {Cell(9, 105), false, 0.0f}}, 0.12f);
+    setClip(slimeAtlas_, Direction::Down, true, {{Cell(7, 105), false, 0.0f}, {Cell(8, 105), false, -1.0f}, {Cell(9, 105), false, 0.0f}}, 0.12f);
+    setClip(slimeAtlas_, Direction::Up, false, {{Cell(7, 105), false, 0.0f}});
+    setClip(slimeAtlas_, Direction::Up, true, {{Cell(7, 105), false, 0.0f}, {Cell(8, 105), false, -1.0f}, {Cell(9, 105), false, 0.0f}}, 0.12f);
     setClip(slimeAtlas_, Direction::Left, false, {{Cell(7, 105), false, 0.0f}});
-    setClip(slimeAtlas_, Direction::Left, true,  {{Cell(7, 105), false, 0.0f}, {Cell(8, 105), false, -1.0f}, {Cell(9, 105), false, 0.0f}}, 0.12f);
+    setClip(slimeAtlas_, Direction::Left, true, {{Cell(7, 105), false, 0.0f}, {Cell(8, 105), false, -1.0f}, {Cell(9, 105), false, 0.0f}}, 0.12f);
     setClip(slimeAtlas_, Direction::Right, false, {{Cell(7, 105), true, 0.0f}});
-    setClip(slimeAtlas_, Direction::Right, true,  {{Cell(7, 105), true, 0.0f}, {Cell(8, 105), true, -1.0f}, {Cell(9, 105), true, 0.0f}}, 0.12f);
+    setClip(slimeAtlas_, Direction::Right, true, {{Cell(7, 105), true, 0.0f}, {Cell(8, 105), true, -1.0f}, {Cell(9, 105), true, 0.0f}}, 0.12f);
 }
 
-Vector2 World::GetPlayerPosition() const {
+Vector2 World::GetPlayerPosition() const
+{
     return player_.position;
 }
 
-Vector2 World::GetWorldPixelSize() const {
-    if (map_.empty()) {
-        return Vector2{0.0f, 0.0f};
-    }
-    return Vector2{static_cast<float>(map_[0].size() * tileSize_), static_cast<float>(map_.size() * tileSize_)};
+Vector2 World::GetWorldPixelSize() const
+{
+    const int width = map_.empty() ? 0 : static_cast<int>(map_[0].size()) * tileSize_;
+    const int height = static_cast<int>(map_.size()) * tileSize_;
+    return Vector2{static_cast<float>(width), static_cast<float>(height)};
 }
 
-void World::UpdateCamera(float dt) {
-    const float activeZoom = showBigMap_ ? 0.42f : targetZoom_;
-    camera_.zoom += (activeZoom - camera_.zoom) * std::min(1.0f, dt * 10.0f);
+void World::UpdateCamera(float dt)
+{
+    camera_.target.x += (player_.position.x + player_.size.x * 0.5f - camera_.target.x) * std::min(1.0f, dt * 8.0f);
+    camera_.target.y += (player_.position.y + player_.size.y * 0.5f - camera_.target.y) * std::min(1.0f, dt * 8.0f);
+    camera_.zoom += (targetZoom_ - camera_.zoom) * std::min(1.0f, dt * 10.0f);
 
-    Vector2 worldSize = GetWorldPixelSize();
-    const float halfVisibleWidth = screenWidth_ * 0.5f / camera_.zoom;
-    const float halfVisibleHeight = screenHeight_ * 0.5f / camera_.zoom;
+    const Vector2 worldSize = GetWorldPixelSize();
+    const float halfWidth = screenWidth_ * 0.5f / camera_.zoom;
+    const float halfHeight = screenHeight_ * 0.5f / camera_.zoom;
 
-    camera_.target.x = std::clamp(player_.position.x + player_.size.x * 0.5f, halfVisibleWidth, worldSize.x - halfVisibleWidth);
-    camera_.target.y = std::clamp(player_.position.y + player_.size.y * 0.5f, halfVisibleHeight, worldSize.y - halfVisibleHeight);
-
-    if (worldSize.x <= halfVisibleWidth * 2.0f) {
-        camera_.target.x = worldSize.x * 0.5f;
-    }
-    if (worldSize.y <= halfVisibleHeight * 2.0f) {
-        camera_.target.y = worldSize.y * 0.5f;
-    }
+    camera_.target.x = std::clamp(camera_.target.x, halfWidth, std::max(halfWidth, worldSize.x - halfWidth));
+    camera_.target.y = std::clamp(camera_.target.y, halfHeight, std::max(halfHeight, worldSize.y - halfHeight));
 }
 
 void World::TryPickup(const std::string &itemName, int amount)
 {
-    InventoryItem newItem = gameplay::MakeInventoryItemByName(itemName, amount);
+    InventoryItem newItem = MakeInventoryItemByName(itemName, amount);
 
     for (auto &item : player_.inventory)
     {
-        // Stack only items that are allowed to stack.
         if (item.name == newItem.name && item.stackable)
         {
-            item.count += amount;
+            item.amount += amount;
             return;
         }
     }
@@ -301,13 +305,15 @@ void World::TryPickup(const std::string &itemName, int amount)
     player_.inventory.push_back(newItem);
 }
 
-bool World::IsWall(Vector2 position) const {
+bool World::IsWall(Vector2 position) const
+{
     int left = static_cast<int>(position.x) / tileSize_;
     int top = static_cast<int>(position.y) / tileSize_;
     int right = static_cast<int>(position.x + player_.size.x - 1) / tileSize_;
     int bottom = static_cast<int>(position.y + player_.size.y - 1) / tileSize_;
 
-    auto blocked = [&](int x, int y) {
+    auto blocked = [&](int x, int y)
+    {
         if (y < 0 || y >= static_cast<int>(map_.size())) return true;
         if (x < 0 || x >= static_cast<int>(map_[y].size())) return true;
         return map_[y][x] == '#';
@@ -316,66 +322,77 @@ bool World::IsWall(Vector2 position) const {
     return blocked(left, top) || blocked(right, top) || blocked(left, bottom) || blocked(right, bottom);
 }
 
-bool World::IsClose(Vector2 a, Vector2 b, float distance) const {
-    float dx = a.x - b.x;
-    float dy = a.y - b.y;
+bool World::IsClose(Vector2 a, Vector2 b, float distance) const
+{
+    const float dx = a.x - b.x;
+    const float dy = a.y - b.y;
     return std::sqrt(dx * dx + dy * dy) <= distance;
 }
 
-Rectangle World::Cell(int col, int row) const {
+Rectangle World::Cell(int col, int row) const
+{
     return Rectangle{
         static_cast<float>(col * atlasCellSize_),
         static_cast<float>(row * atlasCellSize_),
         static_cast<float>(atlasCellSize_),
-        static_cast<float>(atlasCellSize_)
-    };
+        static_cast<float>(atlasCellSize_)};
 }
 
-int World::DirectionIndex(Direction direction) const {
+int World::DirectionIndex(Direction direction) const
+{
     return static_cast<int>(direction);
 }
 
-Direction World::DirectionFromVector(Vector2 direction) const {
-    if (std::fabs(direction.x) > std::fabs(direction.y)) {
+Direction World::DirectionFromVector(Vector2 direction) const
+{
+    if (std::fabs(direction.x) > std::fabs(direction.y))
+    {
         return direction.x >= 0.0f ? Direction::Right : Direction::Left;
     }
     return direction.y >= 0.0f ? Direction::Down : Direction::Up;
 }
 
-const AnimationClip& World::SelectClip(const DirectionalSprite& spriteSet, Direction facing, bool walking) const {
-    int index = DirectionIndex(facing);
-    const AnimationClip& clip = walking ? spriteSet.walk[index] : spriteSet.idle[index];
-    if (!clip.frames.empty()) {
+const AnimationClip &World::SelectClip(const DirectionalSprite &spriteSet, Direction facing, bool walking) const
+{
+    const int index = DirectionIndex(facing);
+    const AnimationClip &clip = walking ? spriteSet.walk[index] : spriteSet.idle[index];
+    if (!clip.frames.empty())
+    {
         return clip;
     }
     return spriteSet.idle[index];
 }
 
-const AtlasFrame& World::ResolveFrame(const AnimationClip& clip, float animClock) const {
+const AtlasFrame &World::ResolveFrame(const AnimationClip &clip, float animClock) const
+{
     static AtlasFrame fallback{};
-    if (clip.frames.empty()) {
+    if (clip.frames.empty())
+    {
         return fallback;
     }
 
-    if (clip.frames.size() == 1 || clip.frameDuration <= 0.0f) {
+    if (clip.frames.size() == 1 || clip.frameDuration <= 0.0f)
+    {
         return clip.frames.front();
     }
 
-    int frameIndex = static_cast<int>(animClock / clip.frameDuration) % static_cast<int>(clip.frames.size());
+    const int frameIndex = static_cast<int>(animClock / clip.frameDuration) % static_cast<int>(clip.frames.size());
     return clip.frames[frameIndex];
 }
 
-int World::TileVariantIndex(int x, int y, int count) const {
-    if (count <= 0) {
+int World::TileVariantIndex(int x, int y, int count) const
+{
+    if (count <= 0)
+    {
         return 0;
     }
 
     int seed = x * 73428767 ^ y * 912931;
     seed ^= (seed >> 13);
     seed *= 1274126177;
-    if (seed < 0) {
+    if (seed < 0)
+    {
         seed = -seed;
     }
     return seed % count;
 }
-

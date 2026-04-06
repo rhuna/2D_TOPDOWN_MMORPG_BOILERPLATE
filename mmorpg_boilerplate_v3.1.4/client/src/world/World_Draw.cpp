@@ -221,7 +221,7 @@ void World::DrawHud() const
     inventory << "Inventory: ";
     for (std::size_t i = 0; i < player_.inventory.size(); ++i)
     {
-        inventory << player_.inventory[i].name << " x" << player_.inventory[i].count;
+        inventory << player_.inventory[i].name << " x" << player_.inventory[i].amount;
         if (i + 1 < player_.inventory.size())
         {
             inventory << ", ";

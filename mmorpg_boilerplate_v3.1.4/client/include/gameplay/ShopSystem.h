@@ -1,15 +1,13 @@
 #pragma once
 
 #include "core/Types.h"
-#include "gameplay/InventorySystem.h"
 #include <string>
 
-class ShopSystem
+namespace gameplay
 {
-public:
-    bool TryBuy(Player& player,
-                const Npc& merchant,
-                int selectedIndex,
-                const InventorySystem& inventorySystem,
-                std::string& outMessage) const;
-};
+    class ShopSystem
+    {
+    public:
+        bool TryBuy(Player& player, const Npc& merchant, int selectedIndex, std::string& outMessage) const;
+    };
+}

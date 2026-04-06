@@ -1,44 +1,41 @@
 #pragma once
 
-#include "core/Types.h"
-#include "game/QuestSystem.h"
-#include "gameplay/InventorySystem.h"
-#include "gameplay/QuestRuntimeSystem.h"
-#include "gameplay/ShopSystem.h"
-#include "net/NetworkClient.h"
-#include "raylib.h"
-#include "ui/DialogueUI.h"
-#include "ui/EquipmentUI.h"
-#include "ui/InventoryUI.h"
-#include "ui/QuestUI.h"
-#include "ui/ShopUI.h"
+#include "net/NetworkClient.h" // for RemotePlayer
+// Forward declare UI classes to avoid circular dependencies.
+#include "core/Types.h" // for Actor, Npc, Enemy, Vector2, Color, Direction
+#include "raylib.h" // for Rectangle
+#include "game/QuestSystem.h" // for QuestSystem
+#include "gameplay/GameServices.h"
+#include "ui/EquipmentUI.h" // for EquipmentUI
+#include "ui/InventoryUI.h" // for InventoryUI
+#include "ui/QuestUI.h" // for QuestUI
+#include "ui/ShopUI.h"  // for ShopUI
+#include "ui/DialogueUI.h"  // for DialogueUI
 
 #include <array>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-struct AtlasFrame
-{
+
+
+struct AtlasFrame {
     Rectangle source{};
     bool flipX = false;
     float yBob = 0.0f;
 };
 
-struct AnimationClip
-{
+struct AnimationClip {
     std::vector<AtlasFrame> frames;
     float frameDuration = 0.18f;
 };
 
-struct DirectionalSprite
-{
+struct DirectionalSprite {
     std::array<AnimationClip, 4> idle;
     std::array<AnimationClip, 4> walk;
 };
 
-struct TileAtlas
-{
+struct TileAtlas {
     std::vector<Rectangle> grass;
     std::vector<Rectangle> path;
     std::vector<Rectangle> dirt;
@@ -57,24 +54,26 @@ struct ChoiceUiState
     int selectedIndex = 0;
 };
 
+
+
+
 struct RemoteSnapshot;
 
-class World
-{
+class World {
 public:
     World();
     ~World();
-
     void Update(float dt);
     void Draw() const;
-
-    void UpdateRemotePlayers(const std::unordered_map<int, RemotePlayer>& snapshots, int localId, float dt);
+    void UpdateRemotePlayers(const std::unordered_map<int, RemotePlayer> &snapshots, int localId, float dt);
     Vector2 GetPlayerPosition() const;
     Vector2 GetWorldPixelSize() const;
+    // Lets Game ask whether a modal / blocking world UI is open.
+    // This is needed so Enter won't also open chat while a menu is active.
     bool IsBlockingUiOpen() const;
-
     void OpenShopUi(int merchantIndex);
     void CloseShopUi();
+
     void UpdateShopUi();
     void DrawShopUi() const;
 
@@ -87,24 +86,25 @@ public:
     void UpdateQuestLogUi();
     void DrawQuestLogUi() const;
 
+    void ToggleInventoryUi();
+    void ToggleEquipmentUi();
+    void ToggleQuestLogUi();
+
     void UpdateChoiceUi();
-    void OpenChoiceUi(const std::string& questId);
+    void OpenChoiceUi(const std::string &questId);
     void CloseChoiceUi();
     void DrawChoiceUi() const;
-
     void HandleBuildingTransitions();
-
-private:
+    
+    private:
     void LoadAssets();
     void SetupAtlas();
-
     void UpdatePlayer(float dt);
     void UpdateEnemies(float dt);
     void HandleCombat(float dt);
     void HandleInteraction();
     void HandleDrops();
     void UpdateCamera(float dt);
-
     void DrawMap() const;
     void DrawHud() const;
     void DrawMinimap() const;
@@ -115,7 +115,6 @@ private:
     void DrawRemotePlayer(const RemoteActor& remote) const;
     void DrawAnimatedActor(const Actor& actor, const DirectionalSprite& spriteSet, Color tint) const;
     void DrawPickupSprite(Vector2 position, Rectangle source, Color tint = WHITE) const;
-
     void TryPickup(const std::string& itemName, int amount);
     bool IsWall(Vector2 position) const;
     bool IsClose(Vector2 a, Vector2 b, float distance) const;
@@ -126,11 +125,11 @@ private:
     const AnimationClip& SelectClip(const DirectionalSprite& spriteSet, Direction facing, bool walking) const;
     const AtlasFrame& ResolveFrame(const AnimationClip& clip, float animClock) const;
     int TileVariantIndex(int x, int y, int count) const;
-
+    // UI methods:
+    //bool IsBlockingUiOpen() const;
     void CloseAllOverlayUi();
-    void ToggleInventoryUi();
-    void ToggleEquipmentUi();
-    void ToggleQuestLogUi();
+
+    
 
 private:
     std::vector<std::string> map_;
@@ -141,27 +140,22 @@ private:
     int atlasCellSize_ = 16;
     bool showBigMap_ = false;
     float targetZoom_ = 2.0f;
-
     Player player_;
     std::vector<Enemy> enemies_;
     std::vector<Npc> npcs_;
     std::vector<Drop> drops_;
     std::vector<RemoteActor> remotePlayers_;
-
     QuestSystem questSystem_;
-    InventorySystem inventorySystem_;
-    ShopSystem shopSystem_;
-    QuestRuntimeSystem questRuntimeSystem_;
+    gameplay::GameServices services_;
     std::string message_;
     float playerAttackTimer_ = 0.0f;
-
     Texture2D tileset_{};
     bool tilesetLoaded_ = false;
     TileAtlas tiles_;
     DirectionalSprite playerAtlas_;
     DirectionalSprite npcAtlas_;
     DirectionalSprite slimeAtlas_;
-
+    // UI states:
     ChoiceUiState choiceUi_;
     std::vector<BuildingDoor> buildingDoors_;
     std::vector<ExitDoor> exitDoors_;

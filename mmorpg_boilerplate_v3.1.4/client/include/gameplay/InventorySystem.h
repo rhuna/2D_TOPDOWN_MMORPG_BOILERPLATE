@@ -3,11 +3,14 @@
 #include "core/Types.h"
 #include <string>
 
-class InventorySystem
+namespace gameplay
 {
-public:
-    bool AddItem(Player& player, const InventoryItem& item) const;
-    bool AddNamedItem(Player& player, const std::string& itemName, int amount) const;
-    bool UseSelectedItem(Player& player, int selectedIndex, std::string& outMessage) const;
-    bool EquipSelectedItem(Player& player, int selectedIndex, std::string& outMessage) const;
-};
+    class InventorySystem
+    {
+    public:
+        bool TryAddItem(Player& player, const InventoryItem& item, std::string& outMessage) const;
+        bool TryUseSelectedItem(Player& player, int selectedIndex, std::string& outMessage) const;
+        bool TryEquipSelectedItem(Player& player, int selectedIndex, std::string& outMessage) const;
+        void getInventory(const Player& player, std::vector<InventoryItem>& outInventory) const;
+    };
+}

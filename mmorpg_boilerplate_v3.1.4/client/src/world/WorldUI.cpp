@@ -1,6 +1,8 @@
 #include "world/World.h"
 #include "gameplay/ShopSystem.h"
 #include "raylib.h"
+//services_
+#include "gameplay/GameServices.h"
 
 // ==========================
 // TOGGLES
@@ -59,6 +61,7 @@ void World::CloseAllOverlayUi()
 
 bool World::IsBlockingUiOpen() const
 {
+
     return choiceUi_.visible || shopUi_.IsOpen() || inventoryUi_.IsOpen() || equipmentUi_.IsOpen() || questLogUi_.IsOpen() || dialogueUi_.IsOpen();
 }
 
@@ -94,9 +97,9 @@ void World::UpdateInventoryUi()
     if (IsKeyPressed(KEY_ENTER) && itemCount > 0)
     {
         const int selectedIndex = inventoryUi_.SelectedIndex();
-        if (!inventorySystem_.UseSelectedItem(player_, selectedIndex, message_))
+        if (!services_.inventory.TryUseSelectedItem(player_, selectedIndex, message_))
         {
-            inventorySystem_.EquipSelectedItem(player_, selectedIndex, message_);
+            services_.inventory.TryEquipSelectedItem(player_, selectedIndex, message_);
         }
     }
 }
@@ -234,7 +237,7 @@ void World::UpdateQuestLogUi()
         return;
     }
 
-    const auto activeQuests = questSystem_.GetActiveQuests();
+    const auto activeQuests = services_.quests->GetActiveQuests();
     const int questCount = static_cast<int>(activeQuests.size());
 
     if (IsKeyPressed(KEY_UP))
@@ -266,7 +269,7 @@ void World::DrawQuestLogUi() const
     DrawText("Quest Log", boxX + 20, boxY + 18, 28, YELLOW);
     DrawText("Esc = close", boxX + 20, boxY + 52, 18, LIGHTGRAY);
 
-    const auto activeQuests = questSystem_.GetActiveQuests();
+    const auto activeQuests = services_.quests->GetActiveQuests();
     int y = boxY + 95;
 
     if (activeQuests.empty())
@@ -288,7 +291,7 @@ void World::DrawQuestLogUi() const
 
         if (quest != nullptr)
         {
-            const QuestDefinition* definition = questSystem_.GetDefinition(quest->questId);
+            const QuestDefinition* definition = services_.quests->GetDefinition(quest->questId);
             const std::string label = (definition != nullptr && !definition->title.empty()) ? definition->title : quest->questId;
             DrawText(label.c_str(), boxX + 28, y, 22, selected ? WHITE : LIGHTGRAY);
         }
@@ -365,7 +368,7 @@ void World::UpdateShopUi()
 
     if (IsKeyPressed(KEY_ENTER) && itemCount > 0)
     {
-        shopSystem_.TryBuy(player_, merchant, shopUi_.SelectedIndex(), inventorySystem_, message_);
+        services_.shop.TryBuy(player_, merchant, shopUi_.SelectedIndex(), message_);
     }
 }
 

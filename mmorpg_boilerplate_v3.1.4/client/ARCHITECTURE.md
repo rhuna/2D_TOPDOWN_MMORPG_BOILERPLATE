@@ -1,63 +1,39 @@
-# Scalable gameplay architecture
+# Engine-Style Architecture Plan
 
-This stage moves long-term game rules out of `World` and into dedicated gameplay systems.
+This package is a **drop-in refactor scaffold** for evolving the current project into a long-term, scalable codebase.
 
-## World module responsibility
+## Goals
+- Keep `World` as an orchestrator instead of a rules bucket.
+- Move gameplay rules into dedicated systems.
+- Keep rendering isolated from gameplay logic.
+- Prepare for save/load, multiplayer, content-driven data, and future ECS-style work.
 
-`World` is now mainly responsible for:
-- world state ownership (`player_`, `npcs_`, `enemies_`, `drops_`)
-- map/camera/render orchestration
-- top-level update orchestration
-- routing input to UI and systems
+## Module ownership
 
-`World` should **not** be the place where item rules, shop purchase rules, or quest reward rules are invented.
+### world/
+Owns world state and high-level orchestration:
+- map data and spawn setup
+- actor containers
+- camera and collision helpers
+- top-level update order and draw order
 
-## Gameplay systems
+### gameplay/
+Owns rules and mutation of state:
+- item creation
+- inventory changes
+- equipment changes
+- shopping rules
+- quest runtime handoff
 
-### `gameplay/ItemFactory`
-Single source of truth for turning data names into runtime items/equipment.
+### ui/
+Owns modal state, local selection state, and drawing of menus.
 
-Owns:
-- inventory item construction by item name
-- weapon construction by item name
-- armor construction by item name
+### data/
+Owns content presets and definitions.
 
-### `gameplay/InventorySystem`
-Owns player inventory mutations.
-
-Owns:
-- adding items
-- stacking logic
-- consumable use logic
-- equip logic for weapon/armor items
-
-### `gameplay/ShopSystem`
-Owns merchant purchase rules.
-
-Owns:
-- gold checks
-- selected item validation
-- adding purchased items to inventory
-- purchase result messaging
-
-### `gameplay/QuestRuntimeSystem`
-Owns runtime quest handoff rules that connect NPC interactions and combat events to `QuestSystem`.
-
-Owns:
-- NPC conversation branches that accept / reward quests
-- enemy kill quest event routing
-- item collection quest event routing
-- quest reward application to player state
-
-## Scaling rules
-
-1. Add new item definitions in `ItemFactory` or migrate that file to data-driven JSON later.
-2. Add new player inventory behavior in `InventorySystem`.
-3. Add buy/sell/currency rules in `ShopSystem`.
-4. Add quest runtime scripting and NPC reward logic in `QuestRuntimeSystem`.
-5. Keep `World_Interaction.cpp` thin: detect nearby actor, then hand off to a system.
-6. Keep `WorldUI.cpp` thin: handle menu cursor movement, then hand off to a system when Enter is pressed.
-
-## Next recommended step
-
-The next long-term scalability upgrade is to move spawn definitions and NPC/merchant setup out of `World.cpp` into a data-driven spawn/content loader so worlds can be authored without recompiling code.
+## Recommended next phases
+1. Keep existing world split stable.
+2. Gradually route old helper calls to `gameplay::` or `services_`.
+3. Move hardcoded merchant stock and item presets into data tables.
+4. Introduce a save-game serializer and content database.
+5. Later: convert to ECS-friendly actor storage if needed.

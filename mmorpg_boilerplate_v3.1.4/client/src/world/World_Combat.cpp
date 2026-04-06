@@ -35,7 +35,7 @@ void World::HandleCombat(float)
                 player_.gold += 5;
                 drops_.push_back(Drop{enemy.position, "Herb", 1, false});
                 message_ = "You defeated a " + enemy.name + " and found an Herb.";
-                questRuntimeSystem_.NotifyEnemyKilled(questSystem_, "slime", message_);
+                services_.questRuntime.NotifyEnemyKilled(*services_.quests, "slime", message_);
             }
         }
     }

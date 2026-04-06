@@ -1,3 +1,4 @@
+
 #include "world/World.h"
 #include "raylib.h"
 #include <algorithm>
@@ -19,58 +20,18 @@ void World::Update(float dt)
         targetZoom_ = std::clamp(targetZoom_ + wheel * 0.20f, 1.0f, 3.5f);
     }
 
-    if (!choiceUi_.visible && !shopUi_.IsOpen())
+    if (!choiceUi_.visible && !shopUi_.IsOpen() && !dialogueUi_.IsOpen())
     {
-        if (IsKeyPressed(KEY_I))
-        {
-            ToggleInventoryUi();
-        }
-
-        if (IsKeyPressed(KEY_C))
-        {
-            ToggleEquipmentUi();
-        }
-
-        if (IsKeyPressed(KEY_Q))
-        {
-            ToggleQuestLogUi();
-        }
+        if (IsKeyPressed(KEY_I)) ToggleInventoryUi();
+        if (IsKeyPressed(KEY_C)) ToggleEquipmentUi();
+        if (IsKeyPressed(KEY_Q)) ToggleQuestLogUi();
     }
 
-    if (choiceUi_.visible)
-    {
-        UpdateChoiceUi();
-        UpdateCamera(dt);
-        return;
-    }
-
-    if (shopUi_.IsOpen())
-    {
-        UpdateShopUi();
-        UpdateCamera(dt);
-        return;
-    }
-
-    if (inventoryUi_.IsOpen())
-    {
-        UpdateInventoryUi();
-        UpdateCamera(dt);
-        return;
-    }
-
-    if (equipmentUi_.IsOpen())
-    {
-        UpdateEquipmentUi();
-        UpdateCamera(dt);
-        return;
-    }
-
-    if (questLogUi_.IsOpen())
-    {
-        UpdateQuestLogUi();
-        UpdateCamera(dt);
-        return;
-    }
+    if (choiceUi_.visible) { UpdateChoiceUi(); UpdateCamera(dt); return; }
+    if (shopUi_.IsOpen()) { UpdateShopUi(); UpdateCamera(dt); return; }
+    if (inventoryUi_.IsOpen()) { UpdateInventoryUi(); UpdateCamera(dt); return; }
+    if (equipmentUi_.IsOpen()) { UpdateEquipmentUi(); UpdateCamera(dt); return; }
+    if (questLogUi_.IsOpen()) { UpdateQuestLogUi(); UpdateCamera(dt); return; }
 
     playerAttackTimer_ -= dt;
     UpdatePlayer(dt);

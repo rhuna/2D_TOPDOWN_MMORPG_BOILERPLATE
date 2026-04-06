@@ -1,0 +1,6 @@
+Cleaned up duplicate code in client/src/world by:
+- shrinking World.cpp down to core world setup/shared helpers
+- keeping gameplay/update/render/UI logic in dedicated files
+- removing duplicate World_Render.cpp and World_Gameplay.cpp
+- updating client/CMakeLists.txt to compile the split world sources
+- fixing a typo in WorldUI.cpp (services_.inventoys)

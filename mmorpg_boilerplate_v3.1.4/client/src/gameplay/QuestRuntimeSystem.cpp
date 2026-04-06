@@ -1,128 +1,86 @@
 #include "gameplay/QuestRuntimeSystem.h"
+#include "gameplay/InventorySystem.h"
+#include <functional>
 
-#include "gameplay/ItemFactory.h"
-
-#include <algorithm>
-
-bool QuestRuntimeSystem::HandleNpcInteraction(QuestSystem& questSystem,
-                                              Player& player,
-                                              const Npc& npc,
-                                              const InventorySystem& inventorySystem,
-                                              std::function<void(const std::string&)> openChoiceUi,
-                                              std::string& outMessage) const
+namespace gameplay
 {
-    if (npc.name == "Elder Rowan")
+    bool QuestRuntimeSystem::TryAcceptFromNpc(QuestSystem& quests, const Npc& npc, std::string& outMessage) const
     {
-        if (questSystem.CanAcceptQuest("main_001"))
-        {
-            questSystem.AcceptQuest("main_001");
-            questSystem.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
-            outMessage = npc.name + ": Please clear out 3 slimes near the village.";
-            return true;
-        }
-
-        if (questSystem.IsQuestActive("main_001"))
-        {
-            questSystem.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
-        }
-
-        if (questSystem.IsAwaitingChoice("main_001"))
-        {
-            openChoiceUi("main_001");
-            outMessage = npc.name + ": Choose your next path.";
-            return true;
-        }
-
-        int rewardGold = 0;
-        int rewardXp = 0;
-        int rewardItemCount = 0;
-        std::string rewardItemId;
-        if (questSystem.RewardQuest("main_001", rewardGold, rewardXp, rewardItemId, rewardItemCount))
-        {
-            player.gold += rewardGold;
-            player.xp += rewardXp;
-            if (rewardItemId == "bronze_blade")
-            {
-                inventorySystem.AddNamedItem(player, "Bronze Blade", std::max(1, rewardItemCount));
-                player.weapon = gameplay::MakeWeaponForItemName("Bronze Blade");
-            }
-            outMessage = npc.name + ": You have earned your reward.";
-            return true;
-        }
-
-        if (questSystem.CanAcceptQuest("main_002") && questSystem.HasFlag("path_crossroads"))
-        {
-            questSystem.AcceptQuest("main_002");
-            questSystem.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
-            outMessage = npc.name + ": Head to the crossroads and find the Wanderer.";
-            return true;
-        }
-
-        if (questSystem.CanAcceptQuest("side_001") && questSystem.HasFlag("path_healer"))
-        {
-            questSystem.AcceptQuest("side_001");
-            questSystem.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
-            outMessage = npc.name + ": Gather 3 herbs for the healer.";
-            return true;
-        }
-
-        if (questSystem.IsQuestActive("side_001"))
-        {
-            questSystem.NotifyEvent({QuestEventType::NpcTalkedTo, "elder_rowan", 1});
-            if (questSystem.RewardQuest("side_001", rewardGold, rewardXp, rewardItemId, rewardItemCount))
-            {
-                player.gold += rewardGold;
-                player.xp += rewardXp;
-                outMessage = npc.name + ": Thank you for helping the healer.";
-                return true;
-            }
-        }
-
-        outMessage = npc.name + " (" + npc.regionName + "): " + npc.idleText;
+        // Placeholder hook for future npc->quest mapping.
+        QuestEvent event;
+        event.type = QuestEventType::NpcTalkedTo;
+        event.targetId = npc.name;
+        event.amount = 1;
+        quests.NotifyEvent(event);
+        outMessage = npc.idleText;
         return true;
     }
 
-    if (npc.name == "Wanderer")
+    bool QuestRuntimeSystem::NotifyNpcTalk(QuestSystem& quests, const Npc& npc) const
     {
-        if (questSystem.IsQuestActive("main_002"))
-        {
-            questSystem.NotifyEvent({QuestEventType::NpcTalkedTo, "wanderer", 1});
-        }
-
-        int rewardGold = 0;
-        int rewardXp = 0;
-        int rewardItemCount = 0;
-        std::string rewardItemId;
-        if (questSystem.RewardQuest("main_002", rewardGold, rewardXp, rewardItemId, rewardItemCount))
-        {
-            player.gold += rewardGold;
-            player.xp += rewardXp;
-            outMessage = npc.name + ": Welcome to the crossroads.";
-            return true;
-        }
-
-        outMessage = npc.name + " (" + npc.regionName + "): " + npc.idleText;
+        QuestEvent event;
+        event.type = QuestEventType::NpcTalkedTo;
+        event.targetId = npc.name;
+        event.amount = 1;
+        quests.NotifyEvent(event);
         return true;
     }
 
-    outMessage = npc.name + " (" + npc.regionName + "): " + npc.idleText;
-    return true;
-}
-
-void QuestRuntimeSystem::NotifyEnemyKilled(QuestSystem& questSystem,
-                                           const std::string& enemyId,
-                                           std::string& ioMessage) const
-{
-    questSystem.NotifyEvent({QuestEventType::EnemyKilled, enemyId, 1});
-    if (questSystem.IsQuestCompleted("main_001"))
+    bool QuestRuntimeSystem::RewardQuestIfPossible(QuestSystem& quests, Player& player, const Npc& npc, std::string& outRewardMessage, InventoryItem* outRewardItem) const
     {
-        ioMessage = "Quest complete. Return to Elder Rowan.";
+        (void)player;
+        (void)npc;
+        (void)outRewardItem;
+        int gold = 0;
+        int xp = 0;
+        std::string itemId;
+        int itemCount = 0;
+        // Placeholder: real quest turn-in routing should map NPCs to quest IDs.
+        (void)quests;
+        (void)gold; (void)xp; (void)itemId; (void)itemCount;
+        outRewardMessage.clear();
+        return false;
     }
-}
 
-void QuestRuntimeSystem::NotifyItemCollected(QuestSystem& questSystem,
-                                             const std::string& itemId,
-                                             int amount) const
-{
-    questSystem.NotifyEvent({QuestEventType::ItemCollected, itemId, amount});
+    void QuestRuntimeSystem::NotifyEnemyKilled(QuestSystem& quests, const std::string& enemyType, std::string& outMessage) const
+    {
+        QuestEvent event;
+        event.type = QuestEventType::EnemyKilled;
+        event.targetId = enemyType;
+        event.amount = 1;
+        quests.NotifyEvent(event);
+        outMessage = "Killed an enemy: " + enemyType;
+    }
+
+    bool QuestRuntimeSystem::HandleNpcInteraction(
+        QuestSystem &quests,
+        Player &player,
+        const Npc &npc,
+        gameplay::InventorySystem &inventory,
+        std::function<void(const std::string &)> openChoiceUiCallback,
+        std::string &outMessage) const
+    {
+        // This is a placeholder implementation. A real implementation would have more complex logic to determine whether to open a choice UI, what choices to present, etc.
+        if (quests.IsAwaitingChoice(npc.name))
+        {
+            openChoiceUiCallback(npc.name);
+            outMessage = npc.questText;
+            return true;
+        }
+        else
+        {
+            // Just trigger a normal talk event for now.
+            return NotifyNpcTalk(quests, npc);
+        }
+    }
+
+    void QuestRuntimeSystem::NotifyItemCollected(QuestSystem& quests, const std::string& itemId, int amount) const
+    {
+        QuestEvent event;
+        event.type = QuestEventType::ItemCollected;
+        event.targetId = itemId;
+        event.amount = amount;
+        quests.NotifyEvent(event);
+        // outMessage is not used here since this is a more passive event, but you could extend the system to support it if desired.
+    }
 }

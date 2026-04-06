@@ -22,11 +22,11 @@ void World::HandleInteraction()
             return;
         }
 
-        if (questRuntimeSystem_.HandleNpcInteraction(
+        if (services_.questRuntime.HandleNpcInteraction(
                 questSystem_,
                 player_,
                 npc,
-                inventorySystem_,
+                services_.inventory,
                 [&](const std::string& questId)
                 { OpenChoiceUi(questId); },
                 message_))
@@ -43,7 +43,7 @@ void World::HandleInteraction()
             TryPickup(drop.itemName, drop.amount);
             if (drop.itemName == "Herb")
             {
-                questRuntimeSystem_.NotifyItemCollected(questSystem_, "herb", drop.amount);
+                services_.questRuntime.NotifyItemCollected(*services_.quests, "herb", drop.amount);
             }
             message_ = "Picked up " + drop.itemName + " x" + std::to_string(drop.amount) + ".";
             return;

@@ -2,25 +2,26 @@
 
 #include "core/Types.h"
 #include "game/QuestSystem.h"
-#include "gameplay/InventorySystem.h"
-#include <functional>
 #include <string>
+#include <functional>
 
-class QuestRuntimeSystem
+namespace gameplay
 {
-public:
-    bool HandleNpcInteraction(QuestSystem& questSystem,
-                              Player& player,
-                              const Npc& npc,
-                              const InventorySystem& inventorySystem,
-                              std::function<void(const std::string&)> openChoiceUi,
-                              std::string& outMessage) const;
-
-    void NotifyEnemyKilled(QuestSystem& questSystem,
-                           const std::string& enemyId,
-                           std::string& ioMessage) const;
-
-    void NotifyItemCollected(QuestSystem& questSystem,
-                             const std::string& itemId,
-                             int amount) const;
-};
+    class InventorySystem;
+    class QuestRuntimeSystem
+    {
+    public:
+        bool TryAcceptFromNpc(QuestSystem& quests, const Npc& npc, std::string& outMessage) const;
+        bool NotifyNpcTalk(QuestSystem& quests, const Npc& npc) const;
+        bool RewardQuestIfPossible(QuestSystem& quests, Player& player, const Npc& npc, std::string& outRewardMessage, InventoryItem* outRewardItem = nullptr) const;
+        void NotifyEnemyKilled(QuestSystem& quests, const std::string& enemyType, std::string& outMessage) const;
+        bool HandleNpcInteraction(
+            QuestSystem &quests,
+            Player &player,
+            const Npc &npc,
+            gameplay::InventorySystem &inventory,
+            std::function<void(const std::string &)> openChoiceUiCallback,
+            std::string &outMessage) const;
+        void NotifyItemCollected(QuestSystem& quests, const std::string& itemId, int amount) const;
+    };
+}
