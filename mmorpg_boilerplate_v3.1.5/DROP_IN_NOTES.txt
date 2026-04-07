@@ -1,0 +1,18 @@
+This archive is a drop-in refactor scaffold based on your uploaded project.
+
+What is included:
+- cleaned `Npc` inheritance bug (duplicate `position` removed)
+- `gameplay/` systems folder with ItemFactory, InventorySystem, ShopSystem, QuestRuntimeSystem
+- `GameServices` container for long-term orchestration
+- updated client CMake to build gameplay system files
+- architecture notes for future scaling
+
+What is NOT fully auto-wired yet:
+- all old `World.cpp` helper calls are still in the legacy world layer
+- UI and interaction files are not fully routed through `services_`
+- compile may still require project-specific integration work on your machine
+
+Recommended next steps:
+1. replace old calls like `MakeInventoryItemByName(...)` with `gameplay::MakeInventoryItemByName(...)`
+2. bind `services_` in `World::World()`
+3. route buy/use/equip logic through `services_`
