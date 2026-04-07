@@ -65,4 +65,32 @@ namespace gameplay
         item.stackable = true;
         return item;
     }
+
+    InventoryItem ItemConverter(const Weapon &weapon)
+    {
+        InventoryItem item{};
+        item.name = weapon.name;
+        item.category = ItemCategory::Weapon;
+        item.description = "A weapon that can be equipped.";
+        item.attackBonus = weapon.damage;
+        item.defenseBonus = 0;
+        item.healAmount = 0;
+        item.price = 20; // You can adjust the price based on the weapon's stats
+        item.stackable = false;
+        return item;
+    }   
+
+    InventoryItem ItemConverter(const Armor &armor)
+    {
+        InventoryItem item{};
+        item.name = armor.name;
+        item.category = ItemCategory::Armor;
+        item.description = "An armor that can be equipped.";
+        item.attackBonus = 0;
+        item.defenseBonus = armor.defense;
+        item.healAmount = 0;
+        item.price = 20; // You can adjust the price based on the armor's stats
+        item.stackable = false;
+        return item;
+    }
 }
